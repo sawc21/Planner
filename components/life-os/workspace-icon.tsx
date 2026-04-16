@@ -1,26 +1,26 @@
 import type { LucideIcon } from "lucide-react";
 import {
   BookOpen,
-  BriefcaseBusiness,
-  Compass,
+  Bot,
+  FolderOpen,
+  Radar,
+  Rocket,
+  Sparkles,
   Cpu,
   GraduationCap,
-  Heart,
-  Languages,
   Sigma,
-  Wallet,
 } from "lucide-react";
 
 const ICONS: Record<string, LucideIcon> = {
   "book-open": BookOpen,
-  briefcase: BriefcaseBusiness,
-  compass: Compass,
+  bot: Bot,
   cpu: Cpu,
+  "folder-open": FolderOpen,
   "graduation-cap": GraduationCap,
-  heart: Heart,
-  languages: Languages,
+  radar: Radar,
+  rocket: Rocket,
   sigma: Sigma,
-  wallet: Wallet,
+  sparkles: Sparkles,
 };
 
 export function WorkspaceIcon({

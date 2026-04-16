@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { CalendarView } from "@/components/life-os/calendar-view";
 
 export default function CalendarPage() {
-  redirect("/agenda");
+  return <CalendarView />;
 }

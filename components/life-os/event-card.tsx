@@ -12,6 +12,13 @@ export function EventCard({
   event: EventView;
   compact?: boolean;
 }) {
+  const workspace = event.workspace ?? {
+    name: "General",
+    shortLabel: "GEN",
+    colorToken: "bg-stone-200 text-stone-950",
+    icon: "folder-open",
+  };
+
   return (
     <Card className="rounded-xl border hairline bg-card/90 shadow-none">
       <CardContent className={compact ? "p-3.5" : "p-4"}>
@@ -19,10 +26,10 @@ export function EventCard({
           <div className="space-y-2.5">
             <div className="flex flex-wrap items-center gap-1.5">
               <span
-                className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 font-mono text-[11px] font-medium ${event.workspace.colorToken}`}
+                className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 font-mono text-[11px] font-medium ${workspace.colorToken}`}
               >
-                <WorkspaceIcon icon={event.workspace.icon} className="size-3.5" />
-                {event.workspace.shortLabel}
+                <WorkspaceIcon icon={workspace.icon} className="size-3.5" />
+                {workspace.shortLabel}
               </span>
               <span className="rounded-md border hairline bg-[var(--surface-soft)] px-2 py-0.5 text-[11px] text-muted-foreground">
                 {event.kind.replace("_", " ")}
@@ -52,7 +59,7 @@ export function EventCard({
             </div>
           </div>
           <span className="rounded-md bg-[var(--surface-soft)] px-2 py-0.5 text-[11px] text-muted-foreground">
-            {event.workspace.name}
+            {workspace.name}
           </span>
         </div>
       </CardContent>

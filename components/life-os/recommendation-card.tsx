@@ -1,3 +1,4 @@
+﻿import Link from "next/link";
 import { ArrowRight, CalendarPlus2, CheckCheck, Play, Sparkles } from "lucide-react";
 
 import { ItemPillBadges } from "@/components/life-os/item-pill-badges";
@@ -57,7 +58,7 @@ export function RecommendationCard({
             What should I do today?
           </div>
           <span className="rounded-md bg-[var(--surface-soft)] px-2.5 py-1 font-mono text-[11px] font-medium text-muted-foreground">
-            <span className="text-foreground">{primary.score}</span> · {confidenceLabel}
+            <span className="text-foreground">{primary.score}</span> Â· {confidenceLabel}
           </span>
         </div>
         <div
@@ -123,8 +124,9 @@ export function RecommendationCard({
             </p>
             <div className="space-y-2">
               {secondary.map((entry) => (
-                <div
+                <Link
                   key={entry.item.id}
+                  href={entry.item.workspace?.id ? `/workspaces/${entry.item.workspace.id}` : "/assignments"}
                   className="flex items-center justify-between gap-3 rounded-lg border hairline bg-card/80 px-3.5 py-2.5"
                 >
                   <div>
@@ -132,7 +134,7 @@ export function RecommendationCard({
                     <p className="text-[12px] text-muted-foreground">{entry.explanation}</p>
                   </div>
                   <ArrowRight className="size-4 text-muted-foreground" />
-                </div>
+                </Link>
               ))}
             </div>
           </div>
@@ -141,3 +143,4 @@ export function RecommendationCard({
     </Card>
   );
 }
+

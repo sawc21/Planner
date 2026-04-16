@@ -26,9 +26,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Life OS",
+  title: "Orbit OS",
   description:
-    "A shared operating system for study flows, coursework, life admin, and context-aware planning.",
+    "Plan, study, ship. A visual operating system for school and side-work.",
 };
 
 export default function RootLayout({

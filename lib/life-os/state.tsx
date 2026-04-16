@@ -1,26 +1,34 @@
-"use client";
+﻿"use client";
 
 import { addDays, parseISO, set } from "date-fns";
 import { createContext, useContext, useState } from "react";
 
 import {
+  buildDashboardCommandResult,
+  buildExplanationResult,
   buildPlanCommandResult,
   buildRecommendationCommandResult,
   parseCommandInput,
 } from "@/lib/life-os/commands";
 import { seedLifeOsData } from "@/lib/life-os/mock-data";
 import {
+  getAtRiskWorkspaces,
   getConstraintAwarePlan,
+  getHomeWidgetData,
   getTodayRecommendations,
+  getWorkspaceBundle,
 } from "@/lib/life-os/selectors";
 import type {
   AddEventInput,
   AddMaterialInput,
   AddTaskInput,
   CommandResult,
+  CreateProjectMilestoneInput,
   CreateWorkspaceInput,
+  DashboardWidget,
   Event,
   LifeOsSnapshot,
+  ProjectMilestone,
   StudyMaterial,
   Task,
   Workspace,
@@ -28,16 +36,21 @@ import type {
 
 type LifeOsContextValue = LifeOsSnapshot & {
   focusTodayIds: string[];
+  focusedWorkspaceId: string | null;
   commandPanelOpen: boolean;
   lastCommandResult: CommandResult | null;
+  commandHistory: CommandResult[];
   completeTask: (taskId: string) => void;
   startTask: (taskId: string) => void;
   moveTaskToTomorrow: (taskId: string) => void;
   toggleFocusToday: (taskId: string) => void;
+  focusWorkspace: (workspaceId: string | null) => void;
   addTask: (input: AddTaskInput) => Task;
   addEvent: (input: AddEventInput) => Event;
   addMaterial: (input: AddMaterialInput) => StudyMaterial;
   createWorkspace: (input: CreateWorkspaceInput) => Workspace;
+  addMilestone: (input: CreateProjectMilestoneInput) => ProjectMilestone;
+  setWidgets: (widgets: DashboardWidget[]) => void;
   openCommandPanel: () => void;
   closeCommandPanel: () => void;
   clearCommandResult: () => void;
@@ -71,39 +84,35 @@ function shiftToTomorrow(dateValue?: string) {
 
 function buildTask(input: AddTaskInput, workspaces: Workspace[]): Task {
   const fallbackWorkspace =
-    input.workspaceId ??
-    workspaces.find((workspace) => workspace.kind === "personal")?.id ??
-    workspaces[0]?.id;
-
+    input.primaryWorkspaceId ?? workspaces.find((workspace) => workspace.kind === "course")?.id;
   const nextDay = addDays(new Date(), 1);
   const kind = input.kind ?? "assignment";
 
   return {
     id: createId("task", input.title),
-    workspaceId: fallbackWorkspace,
+    primaryWorkspaceId: fallbackWorkspace,
+    linkedWorkspaceIds: input.linkedWorkspaceIds ?? [],
     kind,
     title: input.title,
     notes: input.notes,
     status: kind === "bill" ? "todo" : "todo",
     priority: input.priority ?? "medium",
     dueAt: set(nextDay, {
-      hours: kind === "bill" ? 17 : 18,
+      hours: kind === "bill" ? 17 : kind === "study_session" ? 19 : 18,
       minutes: 0,
       seconds: 0,
       milliseconds: 0,
     }).toISOString(),
     tags: ["quick-add"],
     amount: input.amount,
-    estimatedMinutes: input.estimatedMinutes ?? (kind === "bill" ? 10 : 35),
-    energy: kind === "bill" ? "low" : "medium",
+    estimatedMinutes: input.estimatedMinutes ?? (kind === "bill" ? 10 : 45),
+    energy: kind === "bill" ? "low" : kind === "study_session" ? "medium" : "medium",
   };
 }
 
 function buildEvent(input: AddEventInput, workspaces: Workspace[]): Event {
   const fallbackWorkspace =
-    input.workspaceId ??
-    workspaces.find((workspace) => workspace.kind === "course")?.id ??
-    workspaces[0]?.id;
+    input.workspaceId ?? workspaces.find((workspace) => workspace.kind === "course")?.id;
   const nextDay = addDays(new Date(), 1);
 
   return {
@@ -132,10 +141,7 @@ function buildEvent(input: AddEventInput, workspaces: Workspace[]): Event {
 
 function buildMaterial(input: AddMaterialInput, workspaces: Workspace[]): StudyMaterial {
   const fallbackWorkspace =
-    input.workspaceId ??
-    workspaces.find((workspace) => workspace.kind === "course" || workspace.kind === "study_track")
-      ?.id ??
-    workspaces[0]?.id;
+    input.workspaceId ?? workspaces.find((workspace) => workspace.kind === "course")?.id ?? workspaces[0]?.id;
 
   return {
     id: createId("material", input.title),
@@ -149,7 +155,7 @@ function buildMaterial(input: AddMaterialInput, workspaces: Workspace[]): StudyM
 }
 
 function buildWorkspace(input: CreateWorkspaceInput): Workspace {
-  const kind = input.kind ?? "study_track";
+  const kind = input.kind ?? "project";
   const shortLabel =
     input.shortLabel ??
     input.name
@@ -163,25 +169,35 @@ function buildWorkspace(input: CreateWorkspaceInput): Workspace {
     name: input.name,
     shortLabel,
     kind,
-    colorToken:
-      kind === "course"
-        ? "bg-sky-100 text-sky-900"
-        : kind === "study_track"
-          ? "bg-emerald-100 text-emerald-900"
-          : kind === "work"
-            ? "bg-violet-100 text-violet-900"
-            : "bg-stone-200 text-stone-900",
-    icon:
-      kind === "course"
-        ? "graduation-cap"
-        : kind === "study_track"
-          ? "compass"
-          : kind === "work"
-            ? "briefcase"
-            : "wallet",
-    ownerLabel: kind === "course" ? "Instructor" : "Self-managed",
-    progressSummary: "A fresh workspace with room to add context.",
+    colorToken: kind === "course" ? "bg-sky-100 text-sky-950" : "bg-violet-100 text-violet-950",
+    icon: kind === "course" ? "graduation-cap" : "rocket",
+    ownerLabel: kind === "course" ? "Instructor" : "Orbit project",
+    progressSummary: kind === "course" ? "A new course board with room for assignments and grades." : "A fresh project board with room for milestones and linked tasks.",
+    active: true,
+    creditHours: kind === "course" ? 3 : undefined,
+    currentGrade: kind === "course" ? 88 : undefined,
+    targetGrade: kind === "course" ? 90 : undefined,
+    semesterLabel: kind === "course" ? "Spring 2026" : undefined,
+    projectHealth: kind === "project" ? "watch" : undefined,
   };
+}
+
+function buildMilestone(input: CreateProjectMilestoneInput): ProjectMilestone {
+  return {
+    id: createId("milestone", input.title),
+    workspaceId: input.workspaceId,
+    title: input.title,
+    summary: input.summary,
+    status: "planned",
+    progressPercent: 0,
+  };
+}
+
+function buildWidgets(snapshot: LifeOsSnapshot): DashboardWidget[] {
+  return getHomeWidgetData(snapshot).map((entry, index) => ({
+    ...entry.widget,
+    order: index,
+  }));
 }
 
 function applyCompletion(task: Task): Task {
@@ -218,21 +234,33 @@ export function LifeOsProvider({
   const [tasks, setTasks] = useState(initialData.tasks);
   const [events, setEvents] = useState(initialData.events);
   const [materials, setMaterials] = useState(initialData.materials);
+  const [milestones, setMilestones] = useState(initialData.milestones);
+  const [widgets, setWidgetsState] = useState(initialData.widgets);
   const [gradebooks] = useState(initialData.gradebooks);
-  const [progressRecords] = useState(initialData.progressRecords);
   const [constraintProfile] = useState(initialData.constraintProfile);
   const [focusTodayIds, setFocusTodayIds] = useState<string[]>([]);
+  const [focusedWorkspaceId, setFocusedWorkspaceId] = useState<string | null>(null);
   const [commandPanelOpen, setCommandPanelOpen] = useState(false);
   const [lastCommandResult, setLastCommandResult] = useState<CommandResult | null>(null);
+  const [commandHistory, setCommandHistory] = useState<CommandResult[]>([]);
 
   const snapshot: LifeOsSnapshot = {
     workspaces,
     tasks,
     events,
     materials,
+    milestones,
+    widgets,
     gradebooks,
-    progressRecords,
     constraintProfile,
+  };
+
+  const pushResult = (result: CommandResult) => {
+    setLastCommandResult(result);
+    if (result.kind !== "message") {
+      setCommandHistory((current) => [result, ...current].slice(0, 8));
+    }
+    return result;
   };
 
   const completeTask = (taskId: string) => {
@@ -269,6 +297,10 @@ export function LifeOsProvider({
     );
   };
 
+  const focusWorkspace = (workspaceId: string | null) => {
+    setFocusedWorkspaceId(workspaceId);
+  };
+
   const addTask = (input: AddTaskInput) => {
     const task = buildTask(input, workspaces);
     setTasks((current) => [task, ...current]);
@@ -293,6 +325,16 @@ export function LifeOsProvider({
     return workspace;
   };
 
+  const addMilestone = (input: CreateProjectMilestoneInput) => {
+    const milestone = buildMilestone(input);
+    setMilestones((current) => [milestone, ...current]);
+    return milestone;
+  };
+
+  const setWidgets = (nextWidgets: DashboardWidget[]) => {
+    setWidgetsState(nextWidgets);
+  };
+
   const openCommandPanel = () => setCommandPanelOpen(true);
   const closeCommandPanel = () => setCommandPanelOpen(false);
   const clearCommandResult = () => setLastCommandResult(null);
@@ -307,89 +349,154 @@ export function LifeOsProvider({
 
     if (parsed.kind === "add_task") {
       const task = addTask(parsed.input);
-      const result: CommandResult = {
+      return pushResult({
         intent: parsed.intent,
         kind: "mutation",
         message: parsed.message,
         taskId: task.id,
-      };
-      setLastCommandResult(result);
-      return result;
+        receipt: {
+          title: parsed.intent === "create_study_session" ? "Study session created" : "Task created",
+          lines: [task.title, task.primaryWorkspaceId ? "Linked to a workspace" : "Independent task"],
+          href: "/assignments",
+        },
+      });
     }
 
     if (parsed.kind === "add_event") {
       const event = addEvent(parsed.input);
-      const result: CommandResult = {
+      return pushResult({
         intent: parsed.intent,
         kind: "mutation",
         message: parsed.message,
         eventId: event.id,
-      };
-      setLastCommandResult(result);
-      return result;
+        receipt: {
+          title: "Event created",
+          lines: [event.title, "Orbit added it to the calendar surface."],
+          href: "/calendar",
+        },
+      });
     }
 
     if (parsed.kind === "add_material") {
       const material = addMaterial(parsed.input);
-      const result: CommandResult = {
+      return pushResult({
         intent: parsed.intent,
         kind: "mutation",
         message: parsed.message,
         materialId: material.id,
-      };
-      setLastCommandResult(result);
-      return result;
+        receipt: {
+          title: "Material added",
+          lines: [material.title, material.summary],
+        },
+      });
     }
 
     if (parsed.kind === "create_workspace") {
       const workspace = createWorkspace(parsed.input);
-      const result: CommandResult = {
+      return pushResult({
         intent: parsed.intent,
         kind: "mutation",
         message: parsed.message,
         workspaceId: workspace.id,
-      };
-      setLastCommandResult(result);
-      return result;
+        receipt: {
+          title: "Project created",
+          lines: [workspace.name, workspace.progressSummary],
+          href: `/workspaces/${workspace.id}`,
+        },
+      });
     }
 
     if (parsed.kind === "recommendation") {
-      const result = buildRecommendationCommandResult(
-        getTodayRecommendations(snapshot).primary,
-      );
-      setLastCommandResult(result);
-      return result;
+      return pushResult(buildRecommendationCommandResult(getTodayRecommendations(snapshot).primary));
     }
 
     if (parsed.kind === "plan") {
-      const result = buildPlanCommandResult(getConstraintAwarePlan(snapshot));
-      setLastCommandResult(result);
-      return result;
+      return pushResult(buildPlanCommandResult(getConstraintAwarePlan(snapshot, focusedWorkspaceId ?? undefined)));
     }
 
-    const result: CommandResult = {
+    if (parsed.kind === "dashboard") {
+      const nextWidgets = buildWidgets(snapshot);
+      setWidgetsState(nextWidgets);
+      return pushResult(buildDashboardCommandResult(parsed.intent, nextWidgets));
+    }
+
+    if (parsed.kind === "explanation") {
+      if (parsed.intent === "focus_workspace") {
+        const matchedWorkspace = workspaces.find((workspace) =>
+          workspace.name.toLowerCase().includes(parsed.target.toLowerCase()) ||
+          workspace.shortLabel.toLowerCase().includes(parsed.target.toLowerCase()),
+        );
+
+        if (!matchedWorkspace) {
+          return pushResult(
+            buildExplanationResult(
+              parsed.intent,
+              "Workspace not found",
+              ["Try a workspace name or short label that exists on the board."],
+            ),
+          );
+        }
+
+        setFocusedWorkspaceId(matchedWorkspace.id);
+        const bundle = getWorkspaceBundle(snapshot, matchedWorkspace.id);
+        return pushResult(
+          buildExplanationResult(
+            parsed.intent,
+            `Focus ${matchedWorkspace.shortLabel}`,
+            [
+              matchedWorkspace.progressSummary,
+              `${bundle?.tasks.length ?? 0} linked tasks and ${bundle?.milestones.length ?? 0} milestones are visible.`,
+            ],
+            `/workspaces/${matchedWorkspace.id}`,
+          ),
+        );
+      }
+
+      const recommendation = getTodayRecommendations(snapshot).primary;
+      const atRisk = getAtRiskWorkspaces(snapshot, new Date(), 1)[0];
+      return pushResult(
+        buildExplanationResult(
+          parsed.intent,
+          "Why Orbit picked this",
+          recommendation
+            ? [recommendation.reason, recommendation.explanation, atRisk ? atRisk.reason : "No workspace is clearly slipping."]
+            : ["The board is calm enough that no single item is dominating the day."],
+          "/home",
+        ),
+      );
+    }
+
+    return pushResult({
       intent: parsed.intent,
       kind: "navigation",
       message: parsed.message,
       href: parsed.href,
-    };
-    setLastCommandResult(result);
-    return result;
+      receipt: {
+        title: "Navigation ready",
+        lines: [parsed.message],
+        href: parsed.href,
+      },
+    });
   };
 
   const value: LifeOsContextValue = {
     ...snapshot,
     focusTodayIds,
+    focusedWorkspaceId,
     commandPanelOpen,
     lastCommandResult,
+    commandHistory,
     completeTask,
     startTask,
     moveTaskToTomorrow,
     toggleFocusToday,
+    focusWorkspace,
     addTask,
     addEvent,
     addMaterial,
     createWorkspace,
+    addMilestone,
+    setWidgets,
     openCommandPanel,
     closeCommandPanel,
     clearCommandResult,
@@ -408,3 +515,4 @@ export function useLifeOs() {
 
   return context;
 }
+

@@ -10,10 +10,10 @@ import {
 const KIND_STYLES: Record<TaskView["kind"], string> = {
   assignment: "bg-[var(--attention-soft)] text-foreground",
   study_session: "bg-[var(--success-soft)] text-foreground",
+  project_task: "bg-violet-100 text-violet-950",
   admin: "bg-[var(--surface-soft)] text-foreground",
   bill: "bg-[var(--danger-soft)] text-foreground",
   errand: "bg-[var(--surface-strong)] text-foreground",
-  work_task: "bg-[var(--surface-soft)] text-foreground",
 };
 
 const PRIORITY_STYLES: Record<TaskView["priority"], string> = {
@@ -33,11 +33,17 @@ const STATUS_STYLES: Record<TaskView["status"], string> = {
 };
 
 export function ItemPillBadges({ item }: { item: TaskView }) {
+  const workspace = item.workspace ?? {
+    shortLabel: "GEN",
+    kind: "project" as const,
+    colorToken: "bg-stone-200 text-stone-950",
+  };
+
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Badge className={item.workspace.colorToken}>{item.workspace.shortLabel}</Badge>
+      <Badge className={workspace.colorToken}>{workspace.shortLabel}</Badge>
       <Badge className="bg-[var(--surface-soft)] text-foreground">
-        {WORKSPACE_KIND_LABELS[item.workspace.kind]}
+        {WORKSPACE_KIND_LABELS[workspace.kind]}
       </Badge>
       <Badge className={KIND_STYLES[item.kind]}>{TASK_KIND_LABELS[item.kind]}</Badge>
       <Badge className={PRIORITY_STYLES[item.priority]}>

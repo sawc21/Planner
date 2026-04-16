@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   Dialog,
@@ -11,11 +11,7 @@ import { CommandConsole } from "@/components/life-os/command-console";
 import { useLifeOs } from "@/lib/life-os/state";
 
 export function CommandPanel() {
-  const {
-    commandPanelOpen,
-    closeCommandPanel,
-    clearCommandResult,
-  } = useLifeOs();
+  const { commandPanelOpen, closeCommandPanel, clearCommandResult } = useLifeOs();
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
@@ -26,12 +22,11 @@ export function CommandPanel() {
 
   return (
     <Dialog open={commandPanelOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-3xl gap-5">
+      <DialogContent className="max-w-2xl gap-4 border-white/10 bg-background/96">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-semibold tracking-tight">Command</DialogTitle>
+          <DialogTitle className="text-xl font-semibold tracking-tight">Quick Orbit command</DialogTitle>
           <DialogDescription>
-            A bounded local command layer for capturing work and generating a plan without turning
-            the app into chat.
+            Use this modal for quick capture or a one-off action. The full workbench lives on `/assistant`.
           </DialogDescription>
         </DialogHeader>
         <CommandConsole onComplete={() => handleOpenChange(false)} />

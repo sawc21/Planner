@@ -1,36 +1,33 @@
-import { screen } from "@testing-library/react";
+﻿import { screen } from "@testing-library/react";
 import { vi } from "vitest";
 
 import { DashboardView } from "@/components/life-os/dashboard-view";
 import { REFERENCE_DATE, renderWithLifeOs } from "@/test/test-utils";
 
-const usePathnameMock = vi.fn();
-const useRouterMock = vi.fn();
-
 vi.mock("next/navigation", () => ({
-  usePathname: () => usePathnameMock(),
-  useRouter: () => useRouterMock(),
+  usePathname: () => "/home",
+  useRouter: () => ({ push: vi.fn() }),
 }));
 
 describe("DashboardView", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(REFERENCE_DATE);
-    usePathnameMock.mockReturnValue("/");
-    useRouterMock.mockReturnValue({ push: vi.fn() });
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it("renders the today board with recommendation, risk, and buddy panels", () => {
+  it("renders the Orbit home widget surface", () => {
     renderWithLifeOs(<DashboardView />);
 
-    expect(screen.getByText(/what should i do today/i)).toBeInTheDocument();
-    expect(screen.getByText(/at-risk workspaces/i)).toBeInTheDocument();
-    expect(screen.getByText(/today's schedule/i)).toBeInTheDocument();
-    expect(screen.getByText(/constraint profile/i)).toBeInTheDocument();
-    expect(screen.getByText(/suggested flow/i)).toBeInTheDocument();
+    expect(screen.getByText(/orbit is briefing the system state/i)).toBeInTheDocument();
+    expect(screen.getByText(/what changed/i)).toBeInTheDocument();
+    expect(screen.getByText(/no assistant receipts yet/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /open assistant/i }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: /open assistant workbench/i })).toBeInTheDocument();
+    expect(screen.getAllByText(/schedule rent payment/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/assistant route/i)).toBeInTheDocument();
   });
 });

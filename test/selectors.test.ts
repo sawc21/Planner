@@ -1,15 +1,19 @@
-import { buildCalmLifeOsData, buildSeedLifeOsData } from "@/lib/life-os/mock-data";
+﻿import { buildCalmLifeOsData, buildSeedLifeOsData } from "@/lib/life-os/mock-data";
 import {
+  getAgendaGroups,
   getAtRiskWorkspaces,
   getConstraintAwarePlan,
+  getGradeWhatIfCards,
+  getHomeWidgetData,
   getOverloadAssessment,
-  getProgressCards,
+  getSemesterGpaSnapshot,
   getTodayRecommendations,
+  getUrgentDeadlines,
 } from "@/lib/life-os/selectors";
 
 const REFERENCE_DATE = new Date("2026-04-16T09:00:00-05:00");
 
-describe("life os selectors", () => {
+describe("orbit selectors", () => {
   it("flags overload for the seeded fixture and keeps the calm fixture below threshold", () => {
     const busyData = buildSeedLifeOsData(REFERENCE_DATE);
     const calmData = buildCalmLifeOsData(REFERENCE_DATE);
@@ -27,15 +31,26 @@ describe("life os selectors", () => {
     expect(recommendations.secondary).toHaveLength(2);
   });
 
-  it("exposes student, study-track, and life/admin workspaces in the seeded data", () => {
+  it("exposes courses and projects in the seeded data", () => {
     const data = buildSeedLifeOsData(REFERENCE_DATE);
     const kinds = new Set(data.workspaces.map((workspace) => workspace.kind));
 
     expect(kinds.has("course")).toBe(true);
-    expect(kinds.has("study_track")).toBe(true);
-    expect(kinds.has("admin")).toBe(true);
-    expect(kinds.has("personal")).toBe(true);
-    expect(kinds.has("work")).toBe(true);
+    expect(kinds.has("project")).toBe(true);
+    expect(data.workspaces.filter((workspace) => workspace.kind === "course")).toHaveLength(4);
+    expect(data.workspaces.filter((workspace) => workspace.kind === "project")).toHaveLength(3);
+  });
+
+  it("builds dashboard widgets, urgent deadlines, and agenda load bars", () => {
+    const data = buildSeedLifeOsData(REFERENCE_DATE);
+    const widgets = getHomeWidgetData(data, REFERENCE_DATE);
+    const urgent = getUrgentDeadlines(data, REFERENCE_DATE);
+    const agenda = getAgendaGroups(data, REFERENCE_DATE);
+
+    expect(widgets.length).toBeGreaterThan(4);
+    expect(urgent[0]?.id).toBe("task-rent");
+    expect(agenda[0]?.loadPercent).toBeGreaterThanOrEqual(0);
+    expect(agenda[0]?.openWindows.length).toBeGreaterThan(0);
   });
 
   it("builds at-risk workspaces and a constraint-aware plan from the shared core", () => {
@@ -48,12 +63,13 @@ describe("life os selectors", () => {
     expect(plan.summary).toMatch(/hours/i);
   });
 
-  it("builds separate progress cards for courses and study tracks", () => {
+  it("builds GPA and what-if cards for course workspaces", () => {
     const data = buildSeedLifeOsData(REFERENCE_DATE);
-    const cards = getProgressCards(data);
+    const semester = getSemesterGpaSnapshot(data);
+    const cards = getGradeWhatIfCards(data);
 
-    expect(cards.courseCards.length).toBeGreaterThan(0);
-    expect(cards.trackCards.length).toBeGreaterThan(0);
-    expect(cards.lifeCards.length).toBeGreaterThan(0);
+    expect(semester.gpa).toBeGreaterThan(0);
+    expect(cards.length).toBeGreaterThan(0);
+    expect(cards[0]?.neededScore).toBeGreaterThan(0);
   });
 });

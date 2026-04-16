@@ -1,16 +1,19 @@
-import type {
+﻿import type {
   AddEventInput,
   AddMaterialInput,
   AddTaskInput,
+  AssistantReceipt,
+  CommandIntent,
   CommandResult,
   CreateWorkspaceInput,
+  DashboardWidget,
   StudyPlan,
   TodayRecommendation,
 } from "@/lib/life-os/types";
 
 type ParsedCommand =
   | {
-      intent: "add_task";
+      intent: "add_task" | "create_study_session";
       kind: "add_task";
       input: AddTaskInput;
       message: string;
@@ -28,7 +31,7 @@ type ParsedCommand =
       message: string;
     }
   | {
-      intent: "create_workspace";
+      intent: "create_project";
       kind: "create_workspace";
       input: CreateWorkspaceInput;
       message: string;
@@ -39,30 +42,36 @@ type ParsedCommand =
       message: string;
     }
   | {
-      intent: "build_study_flow";
+      intent: "generate_weekly_plan";
       kind: "plan";
       message: string;
     }
   | {
-      intent: "show_at_risk_workspaces" | "rebalance_week" | "show_urgent_items";
+      intent: "build_dashboard" | "suggest_widgets";
+      kind: "dashboard";
+      message: string;
+    }
+  | {
+      intent: "rebalance_schedule" | "show_urgent_items";
       kind: "navigation";
       href: string;
+      message: string;
+    }
+  | {
+      intent: "focus_workspace";
+      kind: "explanation";
+      target: string;
+      message: string;
+    }
+  | {
+      intent: "explain_priority";
+      kind: "explanation";
       message: string;
     }
   | {
       kind: "message";
       message: string;
     };
-
-const ADD_TASK_PATTERNS: Array<{
-  pattern: RegExp;
-  kind: AddTaskInput["kind"];
-}> = [
-  { pattern: /^add bill\s+(.+)$/i, kind: "bill" },
-  { pattern: /^add errand\s+(.+)$/i, kind: "errand" },
-  { pattern: /^add task\s+(.+)$/i, kind: "assignment" },
-  { pattern: /^add study session\s+(.+)$/i, kind: "study_session" },
-];
 
 export function parseCommandInput(input: string): ParsedCommand {
   const trimmed = input.trim();
@@ -71,24 +80,46 @@ export function parseCommandInput(input: string): ParsedCommand {
     return {
       kind: "message",
       message:
-        "Try a literal command like add task finish OS lab, add material interview guide, or build study flow.",
+        "Try a literal command like build dashboard, create project orbit launch site, create study session OS quiz review, or explain priority.",
     };
   }
 
-  for (const command of ADD_TASK_PATTERNS) {
-    const match = trimmed.match(command.pattern);
-
-    if (!match?.[1]?.trim()) {
-      continue;
-    }
-
+  const addTaskMatch = trimmed.match(/^add task\s+(.+)$/i);
+  if (addTaskMatch?.[1]?.trim()) {
     return {
       intent: "add_task",
       kind: "add_task",
-      message: `Added ${command.kind === "bill" ? "bill" : "task"}: ${match[1].trim()}.`,
+      message: `Added task: ${addTaskMatch[1].trim()}.`,
       input: {
-        title: match[1].trim(),
-        kind: command.kind,
+        title: addTaskMatch[1].trim(),
+        kind: "assignment",
+      },
+    };
+  }
+
+  const addBillMatch = trimmed.match(/^add bill\s+(.+)$/i);
+  if (addBillMatch?.[1]?.trim()) {
+    return {
+      intent: "add_task",
+      kind: "add_task",
+      message: `Added bill: ${addBillMatch[1].trim()}.`,
+      input: {
+        title: addBillMatch[1].trim(),
+        kind: "bill",
+      },
+    };
+  }
+
+  const studySessionMatch = trimmed.match(/^create study session\s+(.+)$/i);
+  if (studySessionMatch?.[1]?.trim()) {
+    return {
+      intent: "create_study_session",
+      kind: "add_task",
+      message: `Created study session: ${studySessionMatch[1].trim()}.`,
+      input: {
+        title: studySessionMatch[1].trim(),
+        kind: "study_session",
+        estimatedMinutes: 50,
       },
     };
   }
@@ -119,14 +150,15 @@ export function parseCommandInput(input: string): ParsedCommand {
     };
   }
 
-  const createWorkspaceMatch = trimmed.match(/^create workspace\s+(.+)$/i);
-  if (createWorkspaceMatch?.[1]?.trim()) {
+  const createProjectMatch = trimmed.match(/^create project\s+(.+)$/i);
+  if (createProjectMatch?.[1]?.trim()) {
     return {
-      intent: "create_workspace",
+      intent: "create_project",
       kind: "create_workspace",
-      message: `Created workspace: ${createWorkspaceMatch[1].trim()}.`,
+      message: `Created project: ${createProjectMatch[1].trim()}.`,
       input: {
-        name: createWorkspaceMatch[1].trim(),
+        name: createProjectMatch[1].trim(),
+        kind: "project",
       },
     };
   }
@@ -139,29 +171,36 @@ export function parseCommandInput(input: string): ParsedCommand {
     };
   }
 
-  if (/^(build study flow|make plan|create plan)$/i.test(trimmed)) {
+  if (/^(generate weekly plan|make weekly plan|build weekly plan)$/i.test(trimmed)) {
     return {
-      intent: "build_study_flow",
+      intent: "generate_weekly_plan",
       kind: "plan",
-      message: "Building a constraint-aware study flow now.",
+      message: "Building a weekly plan now.",
     };
   }
 
-  if (/^(show at-risk workspaces|at-risk workspaces)$/i.test(trimmed)) {
+  if (/^(build dashboard|refresh home)$/i.test(trimmed)) {
     return {
-      intent: "show_at_risk_workspaces",
-      kind: "navigation",
-      href: "/workspaces?view=at-risk",
-      message: "Opening the workspaces most likely to slip next.",
+      intent: "build_dashboard",
+      kind: "dashboard",
+      message: "Rebuilding the Home dashboard around the current board state.",
     };
   }
 
-  if (/^(rebalance week|rebalance the week)$/i.test(trimmed)) {
+  if (/^(suggest widgets|show widget ideas)$/i.test(trimmed)) {
     return {
-      intent: "rebalance_week",
+      intent: "suggest_widgets",
+      kind: "dashboard",
+      message: "Suggesting a tighter set of widgets for Home.",
+    };
+  }
+
+  if (/^(rebalance schedule|rebalance week|rebalance the week)$/i.test(trimmed)) {
+    return {
+      intent: "rebalance_schedule",
       kind: "navigation",
-      href: "/agenda?view=rebalance",
-      message: "Opening the agenda so you can rebalance the week.",
+      href: "/calendar?view=rebalance",
+      message: "Opening the calendar so Orbit can rebalance the week.",
     };
   }
 
@@ -169,16 +208,38 @@ export function parseCommandInput(input: string): ParsedCommand {
     return {
       intent: "show_urgent_items",
       kind: "navigation",
-      href: "/tasks?priority=high",
-      message: "Opening the urgent task view for high and critical work.",
+      href: "/assignments?scope=overdue",
+      message: "Opening the urgent assignments view now.",
+    };
+  }
+
+  const focusWorkspaceMatch = trimmed.match(/^focus workspace\s+(.+)$/i);
+  if (focusWorkspaceMatch?.[1]?.trim()) {
+    return {
+      intent: "focus_workspace",
+      kind: "explanation",
+      target: focusWorkspaceMatch[1].trim(),
+      message: `Focusing workspace: ${focusWorkspaceMatch[1].trim()}.`,
+    };
+  }
+
+  if (/^(explain priority|why this)$/i.test(trimmed)) {
+    return {
+      intent: "explain_priority",
+      kind: "explanation",
+      message: "Explaining why Orbit picked the current priority.",
     };
   }
 
   return {
     kind: "message",
     message:
-      "I can help with add task, add event, add material, create workspace, what should I do today, build study flow, show at-risk workspaces, rebalance week, or show urgent items.",
+      "I can help with add task, add event, add material, build dashboard, suggest widgets, rebalance schedule, focus workspace, create project, create study session, generate weekly plan, explain priority, or show urgent items.",
   };
+}
+
+function createReceipt(title: string, lines: string[], href?: string): AssistantReceipt {
+  return { title, lines, href };
 }
 
 export function buildRecommendationCommandResult(
@@ -191,14 +252,64 @@ export function buildRecommendationCommandResult(
       ? `Start with ${recommendation.item.title}. ${recommendation.explanation}`
       : "Nothing urgent is pressing right now.",
     recommendation,
+    receipt: createReceipt(
+      "Priority explanation",
+      recommendation
+        ? [
+            recommendation.reason,
+            ...recommendation.scoreBreakdown,
+          ]
+        : ["The board is calm enough to choose one meaningful next move."],
+      "/home",
+    ),
   };
 }
 
 export function buildPlanCommandResult(plan: StudyPlan): CommandResult {
   return {
-    intent: "build_study_flow",
+    intent: "generate_weekly_plan",
     kind: "plan",
     message: plan.summary,
     plan,
+    receipt: createReceipt(
+      "Weekly plan ready",
+      plan.steps.map((step) => `${step.title} Â· ${step.minutes} min`),
+      "/assistant",
+    ),
   };
 }
+
+export function buildDashboardCommandResult(
+  intent: Extract<CommandIntent, "build_dashboard" | "suggest_widgets">,
+  widgets: DashboardWidget[],
+): CommandResult {
+  return {
+    intent,
+    kind: "dashboard",
+    message:
+      intent === "build_dashboard"
+        ? "Home has been rebuilt around Orbit's current priorities."
+        : "Orbit suggested a sharper widget mix for Home.",
+    widgets,
+    receipt: createReceipt(
+      "Home widgets",
+      widgets.map((widget) => widget.title),
+      "/home",
+    ),
+  };
+}
+
+export function buildExplanationResult(
+  intent: Extract<CommandIntent, "focus_workspace" | "explain_priority">,
+  title: string,
+  lines: string[],
+  href?: string,
+): CommandResult {
+  return {
+    intent,
+    kind: "explanation",
+    message: title,
+    receipt: createReceipt(title, lines, href),
+  };
+}
+

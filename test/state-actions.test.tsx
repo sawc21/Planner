@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+﻿import { fireEvent, screen } from "@testing-library/react";
 import { vi } from "vitest";
 
 import { AppShell } from "@/components/life-os/app-shell";
@@ -8,11 +8,11 @@ import type { LifeOsSnapshot } from "@/lib/life-os/types";
 import { REFERENCE_DATE, renderWithLifeOs } from "@/test/test-utils";
 
 const usePathnameMock = vi.fn();
-const useRouterMock = vi.fn();
+const pushMock = vi.fn();
 
 vi.mock("next/navigation", () => ({
   usePathname: () => usePathnameMock(),
-  useRouter: () => useRouterMock(),
+  useRouter: () => ({ push: pushMock }),
 }));
 
 function StoreHarness() {
@@ -58,20 +58,23 @@ function StoreHarness() {
 const overloadFixture: LifeOsSnapshot = {
   workspaces: [
     {
-      id: "admin-life",
-      name: "Personal Admin",
-      shortLabel: "ADMIN",
-      kind: "admin",
-      colorToken: "bg-stone-200 text-stone-900",
-      icon: "wallet",
-      ownerLabel: "Life flows",
+      id: "project-general",
+      name: "General",
+      shortLabel: "GEN",
+      kind: "project",
+      colorToken: "bg-stone-200 text-stone-950",
+      icon: "folder-open",
+      ownerLabel: "Orbit",
       progressSummary: "Busy.",
+      active: true,
+      projectHealth: "watch",
     },
   ],
   tasks: [
     {
       id: "task-rent",
-      workspaceId: "admin-life",
+      primaryWorkspaceId: undefined,
+      linkedWorkspaceIds: [],
       kind: "bill",
       title: "Rent",
       status: "todo",
@@ -84,7 +87,8 @@ const overloadFixture: LifeOsSnapshot = {
     },
     {
       id: "task-b",
-      workspaceId: "admin-life",
+      primaryWorkspaceId: undefined,
+      linkedWorkspaceIds: [],
       kind: "bill",
       title: "Utilities",
       status: "todo",
@@ -97,7 +101,8 @@ const overloadFixture: LifeOsSnapshot = {
     },
     {
       id: "task-c",
-      workspaceId: "admin-life",
+      primaryWorkspaceId: undefined,
+      linkedWorkspaceIds: [],
       kind: "admin",
       title: "Upload paperwork",
       status: "todo",
@@ -110,8 +115,9 @@ const overloadFixture: LifeOsSnapshot = {
   ],
   events: [],
   materials: [],
+  milestones: [],
+  widgets: [],
   gradebooks: [],
-  progressRecords: [],
   constraintProfile: {
     weeklyHoursAvailable: 10,
     weeklyBudgetAvailable: 100,
@@ -121,12 +127,11 @@ const overloadFixture: LifeOsSnapshot = {
   },
 };
 
-describe("life os state actions", () => {
+describe("orbit state actions", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(REFERENCE_DATE);
-    usePathnameMock.mockReturnValue("/tasks");
-    useRouterMock.mockReturnValue({ push: vi.fn() });
+    usePathnameMock.mockReturnValue("/assignments");
   });
 
   afterEach(() => {
@@ -166,8 +171,12 @@ describe("life os state actions", () => {
       { data: overloadFixture },
     );
 
-    expect(screen.getByText(/3 overdue tasks still need relief/i)).toBeInTheDocument();
+    expect(
+      screen.getByText((_, element) => element?.textContent === "3 urgent · 6h left · $80 budget"),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getAllByText("Move rent")[0]);
-    expect(screen.getByText(/2 overdue tasks still need relief/i)).toBeInTheDocument();
+    expect(
+      screen.getByText((_, element) => element?.textContent === "2 urgent · 6h left · $80 budget"),
+    ).toBeInTheDocument();
   });
 });

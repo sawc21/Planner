@@ -6,7 +6,7 @@ export default async function WorkspacesPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
-  const initialView = typeof params.view === "string" ? params.view : "";
+  const initialType = typeof params.type === "string" ? params.type : "";
 
-  return <WorkspacesView initialView={initialView} />;
+  return <WorkspacesView initialType={initialType} />;
 }

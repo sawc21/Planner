@@ -1,15 +1,17 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { differenceInCalendarDays, endOfWeek, format, startOfWeek } from "date-fns";
 import {
+  ArrowUpRight,
+  BadgeCheck,
   BookOpenCheck,
-  BriefcaseBusiness,
   CalendarDays,
   Command,
+  FolderKanban,
   GraduationCap,
-  LayoutDashboard,
+  House,
   Menu,
   Plus,
   Sparkles,
@@ -37,12 +39,12 @@ import { useLifeOs } from "@/lib/life-os/state";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
-  { href: "/", label: "Today", icon: LayoutDashboard },
-  { href: "/agenda", label: "Agenda", icon: CalendarDays },
+  { href: "/home", label: "Home", icon: House },
+  { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/workspaces", label: "Workspaces", icon: GraduationCap },
-  { href: "/tasks", label: "Tasks", icon: BookOpenCheck },
-  { href: "/progress", label: "Progress", icon: TrendingUp },
-  { href: "/command", label: "Command", icon: Command },
+  { href: "/assignments", label: "Assignments", icon: BookOpenCheck },
+  { href: "/grades", label: "Grades", icon: TrendingUp },
+  { href: "/assistant", label: "Assistant", icon: Command },
 ];
 
 function SidebarLinks({
@@ -53,7 +55,7 @@ function SidebarLinks({
   onNavigate?: () => void;
 }) {
   return (
-    <nav className="space-y-1.5">
+    <nav className="space-y-1">
       {NAV_ITEMS.map(({ href, icon: Icon, label }) => {
         const active = pathname === href || (href !== "/" && pathname.startsWith(href));
 
@@ -63,7 +65,7 @@ function SidebarLinks({
             href={href}
             onClick={onNavigate}
             className={cn(
-              "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors",
+              "flex items-center gap-2 rounded-lg px-2.5 py-2 text-[12px] font-medium transition-colors",
               active
                 ? "bg-[var(--sidebar-accent)] text-foreground"
                 : "text-muted-foreground hover:bg-[var(--sidebar-accent)]/60 hover:text-foreground",
@@ -72,7 +74,7 @@ function SidebarLinks({
             <span
               className={cn(
                 "rounded-md p-1.5 transition-colors",
-                active ? "bg-primary/12 text-primary" : "bg-transparent text-muted-foreground",
+                active ? "bg-primary/14 text-primary" : "bg-transparent text-muted-foreground",
               )}
             >
               <Icon className="size-4" />
@@ -91,8 +93,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const {
     workspaces,
     tasks,
+    milestones,
     gradebooks,
-    progressRecords,
     constraintProfile,
     openCommandPanel,
   } = useLifeOs();
@@ -106,7 +108,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     workspaces,
     tasks,
     gradebooks,
-    progressRecords,
+    milestones,
   });
   const today = new Date();
   const weekStart = startOfWeek(today, { weekStartsOn: 1 });
@@ -118,82 +120,74 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen px-4 py-4 sm:px-6 sm:py-5">
-      <div className="mx-auto flex max-w-[1440px] gap-4">
-        <aside className="surface-glass sticky top-4 hidden h-[calc(100vh-2rem)] w-[260px] shrink-0 rounded-2xl lg:flex lg:flex-col">
-          <div className="space-y-5 p-5">
-            <div className="space-y-1.5">
-              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-muted-foreground">
-                Life OS
+    <div className="min-h-screen px-3 py-3 sm:px-4 sm:py-4">
+      <div className="mx-auto flex max-w-[1500px] gap-3">
+        <aside className="surface-glass sticky top-3 hidden h-[calc(100vh-1.5rem)] w-[248px] shrink-0 rounded-2xl lg:flex lg:flex-col">
+          <div className="space-y-4 p-4">
+            <div className="space-y-1">
+              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-primary/86">
+                Orbit OS
               </p>
               <div>
-                <h2 className="text-xl font-semibold tracking-tight text-foreground">
-                  Plan, track, study.
+                <h2 className="text-[18px] font-semibold tracking-tight text-foreground">
+                  Plan, study, ship.
                 </h2>
-                <p className="mt-1.5 text-[13px] leading-5 text-muted-foreground">
-                  One system for coursework, life admin, and focus.
+                <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
+                  A visual operating system for school and side-work.
                 </p>
               </div>
             </div>
 
-            <div className="rounded-xl border hairline bg-card/60 p-4">
+            <div className="rounded-xl border hairline bg-background/58 p-3.5">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                    Utility zone
+                    System status
                   </p>
-                  <p className="mt-1 text-[13px] font-medium text-foreground">
-                    {format(today, "EEEE, MMM d")}
+                  <p className="mt-1 text-[12px] font-medium text-foreground">
+                    {format(today, "EEE, MMM d")}
                   </p>
-                  <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
-                    {overdueTasks} overdue tasks still need relief, with {constraintProfile.hoursRemainingThisWeek} study hours and ${constraintProfile.budgetRemainingThisWeek} left this week.
+                  <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                    {overdueTasks} urgent · {constraintProfile.hoursRemainingThisWeek}h left · ${constraintProfile.budgetRemainingThisWeek} budget
                   </p>
                 </div>
                 <Button size="icon-sm" onClick={openCommandPanel} aria-label="Quick add command">
                   <Plus className="size-4" />
                 </Button>
               </div>
-              <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[var(--surface-soft)]">
-                <div
-                  className="h-1.5 rounded-full bg-primary transition-[width] duration-300"
-                  style={{ width: `${weekProgress}%` }}
-                />
-              </div>
-              <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
-                <span className="rounded-md bg-[var(--surface-soft)] px-2 py-0.5">
-                  <span className="font-mono">{weekProgress}%</span> through the week
-                </span>
-                <span className="rounded-md bg-[var(--surface-soft)] px-2 py-0.5">
-                  <span className="font-mono">{overdueTasks}</span> overdue
-                </span>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/8">
+                <div className="h-1.5 rounded-full bg-primary transition-[width] duration-300" style={{ width: `${weekProgress}%` }} />
               </div>
             </div>
           </div>
 
-          <ScrollArea className="flex-1 px-4 pb-4">
+          <ScrollArea className="flex-1 px-3 pb-3">
             <SidebarLinks pathname={pathname} />
           </ScrollArea>
 
-          <div className="border-t hairline p-4">
-            <div className="rounded-xl border hairline bg-card/60 p-4">
+          <div className="border-t hairline p-3">
+            <div className="rounded-xl border hairline bg-background/58 p-3.5">
               <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                Daily anchor
+                Assistant anchor
               </p>
-              <p className="mt-2 text-[13px] font-medium text-foreground">
-                {recommendation?.item.title ?? "Protect some white space."}
+              <p className="mt-2 text-[12px] font-medium text-foreground">
+                {recommendation?.item.title ?? "Protect open space."}
               </p>
-              <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
-                {recommendation?.explanation ??
-                  "The board is calm enough to choose one meaningful next move."}
+              <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                {recommendation?.explanation ?? "The board is calm enough to keep one narrow focus."}
               </p>
+              <Link href="/assistant" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-3 w-full justify-start")}>
+                <Sparkles className="size-4" />
+                Open workbench
+              </Link>
             </div>
           </div>
         </aside>
 
         <div className="min-w-0 flex-1">
-          <div className="surface-panel mb-4 rounded-2xl border hairline px-4 py-3.5 sm:px-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex items-center gap-3">
+          <div className="surface-panel mb-3 rounded-2xl border hairline px-3.5 py-2.5 sm:px-4">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-2.5">
                 <Button
                   variant="outline"
                   size="icon-sm"
@@ -204,66 +198,63 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <Menu className="size-4" />
                 </Button>
                 <div>
-                  <p className="font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-muted-foreground">
-                    {format(new Date(), "EEEE, MMMM d")}
+                  <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                    System rail
                   </p>
-                  <p className="mt-1 text-[13px] font-medium text-foreground">
+                  <p className="mt-1 text-[12px] font-medium text-foreground">
                     {recommendation
-                      ? `Lead with ${recommendation.item.title.toLowerCase()}.`
-                      : "Your board looks calm today."}
+                      ? `Orbit is leading with ${recommendation.item.title.toLowerCase()}.`
+                      : "Orbit sees a calm board."}
                   </p>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
-                <span className="rounded-md border hairline bg-card/60 px-2.5 py-1 text-muted-foreground">
-                  <span className="font-mono text-foreground">{atRiskWorkspaces.length}</span>{" "}
-                  at-risk workspaces
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                <span className="rounded-full border hairline bg-background/55 px-2.5 py-1 text-muted-foreground">
+                  <span className="font-mono text-foreground">{atRiskWorkspaces.length}</span> at-risk
                 </span>
-                <span className="rounded-md border hairline bg-card/60 px-2.5 py-1 text-muted-foreground">
-                  <span className="font-mono text-foreground">{overdueTasks}</span> overdue tasks
+                <span className="rounded-full border hairline bg-background/55 px-2.5 py-1 text-muted-foreground">
+                  <span className="font-mono text-foreground">{overdueTasks}</span> urgent
                 </span>
-                <span className="rounded-md border hairline bg-card/60 px-2.5 py-1 font-mono text-muted-foreground">
-                  {constraintProfile.hoursRemainingThisWeek} hours left
+                <span className="rounded-full border hairline bg-background/55 px-2.5 py-1 text-muted-foreground">
+                  <span className="font-mono text-foreground">{constraintProfile.hoursRemainingThisWeek}h</span> left
                 </span>
-                <span className="rounded-md border hairline bg-card/60 px-2.5 py-1 text-muted-foreground">
-                  <span className="font-mono text-foreground">
-                    ${constraintProfile.budgetRemainingThisWeek}
-                  </span>{" "}
-                  budget
-                </span>
+                <Link href="/assistant" className="inline-flex items-center gap-1 rounded-full border hairline bg-background/55 px-2.5 py-1 text-muted-foreground transition-colors hover:text-foreground">
+                  Assistant
+                  <ArrowUpRight className="size-3.5" />
+                </Link>
               </div>
             </div>
           </div>
 
-          <main className="pb-6">{children}</main>
+          <main className="pb-4">{children}</main>
         </div>
       </div>
 
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
         <SheetContent side="left" className="surface-glass w-[88vw] max-w-sm">
-          <SheetHeader className="space-y-1.5">
-            <SheetTitle className="text-xl font-semibold tracking-tight">Life OS</SheetTitle>
+          <SheetHeader className="space-y-1">
+            <SheetTitle className="text-xl font-semibold tracking-tight">Orbit OS</SheetTitle>
             <SheetDescription>
-              A shared operating system for study flows, life admin, and the week ahead.
+              A visual operating system for school and side-work.
             </SheetDescription>
           </SheetHeader>
           <div className="px-4 pb-5">
             <SidebarLinks pathname={pathname} onNavigate={() => setMobileNavOpen(false)} />
-            <Separator className="my-5" />
-            <div className="rounded-xl border hairline bg-card/60 p-4">
+            <Separator className="my-4" />
+            <div className="rounded-xl border hairline bg-background/58 p-3.5">
               <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                Next best move
+                Next move
               </p>
-              <p className="mt-2 text-[13px] font-medium text-foreground">
-                {recommendation?.item.title ?? "Protect some white space."}
+              <p className="mt-2 text-[12px] font-medium text-foreground">
+                {recommendation?.item.title ?? "Protect open space."}
               </p>
               <Link
-                href="/command"
+                href="/assistant"
                 onClick={() => setMobileNavOpen(false)}
-                className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-4")}
+                className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-3 w-full justify-start")}
               >
                 <Sparkles className="size-4" />
-                Open Command
+                Open Assistant
               </Link>
               <Button
                 variant="outline"
@@ -275,15 +266,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 }}
               >
                 <Plus className="size-4" />
-                Quick add
+                Quick run
               </Button>
-              <div className="mt-4 rounded-lg bg-[var(--surface-soft)] p-3">
-                <BriefcaseBusiness className="size-4 text-primary" />
-                <p className="mt-2 text-[13px] text-muted-foreground">
+              <div className="mt-3 rounded-lg bg-[var(--surface-soft)]/88 p-3">
+                <FolderKanban className="size-4 text-primary" />
+                <p className="mt-2 text-[12px] leading-5 text-muted-foreground">
                   {atRiskWorkspaces[0]
-                    ? `${atRiskWorkspaces[0].workspace.shortLabel} is currently the most exposed workspace.`
+                    ? `${atRiskWorkspaces[0].workspace.shortLabel} is the most exposed workspace.`
                     : "No workspace is clearly slipping right now."}
                 </p>
+                <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border hairline bg-background/55 px-2 py-0.5 text-[10px] text-muted-foreground">
+                  <BadgeCheck className="size-3.5 text-primary" />
+                  Every surface deep-links into Orbit actions.
+                </div>
               </div>
             </div>
           </div>

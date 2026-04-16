@@ -1,250 +1,243 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { format } from "date-fns";
-import { AlertCircle, CalendarClock, Sparkles, TrendingUp } from "lucide-react";
+import { ArrowRight, CalendarClock, LayoutGrid, Sparkles } from "lucide-react";
 
 import { BuddyPanel } from "@/components/life-os/buddy-panel";
 import { ConstraintCard } from "@/components/life-os/constraint-card";
-import { EmptyState } from "@/components/life-os/empty-state";
-import { EventCard } from "@/components/life-os/event-card";
-import { LifeItemCard } from "@/components/life-os/life-item-card";
-import { MetricCard } from "@/components/life-os/metric-card";
 import { OverloadWarningCard } from "@/components/life-os/overload-warning-card";
 import { PageHeader } from "@/components/life-os/page-header";
-import { RecommendationCard } from "@/components/life-os/recommendation-card";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   buildDailyNarrative,
-  getAgendaGroups,
-  getAtRiskWorkspaces,
   getBuddyInsight,
   getConstraintAwarePlan,
+  getHomeBriefingItems,
+  getHomeWidgetData,
   getOverloadAssessment,
   getTodayRecommendations,
-  getTodayTasks,
 } from "@/lib/life-os/selectors";
 import { useLifeOs } from "@/lib/life-os/state";
 import { cn } from "@/lib/utils";
+
+const ACCENT_STYLES = {
+  violet: "bg-violet-400/14 text-violet-100 ring-1 ring-violet-300/16",
+  sky: "bg-sky-400/14 text-sky-100 ring-1 ring-sky-300/16",
+  amber: "bg-amber-400/14 text-amber-100 ring-1 ring-amber-300/16",
+  emerald: "bg-emerald-400/14 text-emerald-100 ring-1 ring-emerald-300/16",
+  rose: "bg-rose-400/14 text-rose-100 ring-1 ring-rose-300/16",
+} as const;
 
 export function DashboardView() {
   const {
     workspaces,
     tasks,
     events,
+    materials,
+    milestones,
+    widgets,
     gradebooks,
-    progressRecords,
     constraintProfile,
-    focusTodayIds,
-    toggleFocusToday,
+    commandHistory,
     completeTask,
     moveTaskToTomorrow,
     startTask,
+    openCommandPanel,
   } = useLifeOs();
 
-  const recommendations = getTodayRecommendations({
+  const snapshot = {
     workspaces,
     tasks,
-    constraintProfile,
-  });
-  const overload = getOverloadAssessment({
-    workspaces,
-    tasks,
-    constraintProfile,
-  });
-  const atRisk = getAtRiskWorkspaces({
-    workspaces,
-    tasks,
+    events,
+    materials,
+    milestones,
+    widgets,
     gradebooks,
-    progressRecords,
-  });
-  const agenda = getAgendaGroups({ workspaces, tasks, events });
-  const todayGroup = agenda[0];
-  const todayTasks = getTodayTasks({ workspaces, tasks });
-  const buddyInsight = getBuddyInsight({
-    workspaces,
-    tasks,
     constraintProfile,
-    gradebooks,
-    progressRecords,
-  });
-  const plan = getConstraintAwarePlan({
-    workspaces,
-    tasks,
-    constraintProfile,
-    gradebooks,
-    progressRecords,
-  });
-  const narrative = buildDailyNarrative({
-    workspaces,
-    tasks,
-    constraintProfile,
-    gradebooks,
-    progressRecords,
-  });
+  };
+  const recommendations = getTodayRecommendations({ workspaces, tasks, constraintProfile });
+  const primary = recommendations.primary;
+  const overload = getOverloadAssessment({ workspaces, tasks, constraintProfile });
+  const buddyInsight = getBuddyInsight(snapshot);
+  const plan = getConstraintAwarePlan({ workspaces, tasks, constraintProfile });
+  const narrative = buildDailyNarrative(snapshot);
+  const briefings = getHomeBriefingItems(commandHistory).slice(0, 3);
+  const widgetData = getHomeWidgetData(snapshot).filter(
+    (entry) => entry.widget.kind !== "primary_recommendation",
+  );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
-        eyebrow="Today"
-        title="A shared operating system for the day."
-        description="Life admin, coursework, and self-directed study all live on one board, with context-aware planning deciding what should move first."
+        eyebrow="Home"
+        title="Orbit is briefing the system state."
+        description="Home is the assistant-created board for priorities, pressure, project motion, and the latest system changes."
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={openCommandPanel}>
+              Quick run
+            </Button>
+            <Link href="/assistant" className={cn(buttonVariants({ size: "sm" }))}>
+              <Sparkles className="size-4" />
+              Open Assistant
+            </Link>
+          </div>
+        }
       />
 
-      <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <Card className="surface-panel overflow-hidden rounded-2xl border-none">
-          <CardContent className="space-y-6 p-6">
-            <div className="space-y-2">
-              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-muted-foreground">
-                {format(new Date(), "EEEE, MMMM d")}
-              </p>
-              <h2 className="text-3xl font-semibold tracking-tight text-foreground">
-                What deserves your calm attention first?
-              </h2>
-              <p className="max-w-2xl text-[13px] leading-5 text-muted-foreground">
-                The board knows what class, study track, or life flow each item belongs to, so the
-                recommendation can weigh urgency, grade pressure, momentum, and constraints at the
-                same time.
-              </p>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-3">
-              <MetricCard
-                label="Today"
-                value={String(todayTasks.length)}
-                detail="Open tasks touching today"
-                icon={CalendarClock}
-              />
-              <MetricCard
-                label="At risk"
-                value={String(atRisk.length)}
-                detail="Workspaces asking for attention"
-                icon={AlertCircle}
-              />
-              <MetricCard
-                label="Focus"
-                value={String(focusTodayIds.length)}
-                detail="Tasks you've marked to protect"
-                icon={Sparkles}
-              />
-            </div>
-
-            <div className="rounded-xl border hairline bg-card/70 p-4">
-              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                Narrative summary
-              </p>
-              <p className="mt-2 text-[13px] leading-6 text-foreground/85">{narrative}</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <RecommendationCard
-          recommendations={recommendations}
-          onCompleteTask={completeTask}
-          onMoveTaskToTomorrow={moveTaskToTomorrow}
-          onStartTask={startTask}
-        />
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-        <div className="space-y-4">
-          <OverloadWarningCard assessment={overload} />
-          <ConstraintCard constraintProfile={constraintProfile} />
-          <BuddyPanel insight={buddyInsight} plan={plan} />
-        </div>
-
-        <div className="space-y-4">
-          <Card className="surface-card rounded-xl border hairline">
-            <CardHeader className="flex flex-row items-start justify-between gap-4">
-              <div>
-                <CardTitle className="text-xl font-semibold tracking-tight">
-                  Today&apos;s schedule
-                </CardTitle>
-                <p className="mt-1.5 text-[13px] leading-5 text-muted-foreground">
-                  Events and due work grouped together so the study flow and the life flow stay in
-                  the same view.
-                </p>
+      <Card className="surface-panel rounded-2xl border-none">
+        <CardContent className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+          <div className="rounded-xl border hairline bg-background/58 p-4">
+            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              Current recommendation · {format(new Date(), "EEE, MMM d")}
+            </p>
+            <p className="mt-2 text-xl font-semibold tracking-tight text-foreground">
+              {primary?.item.title ?? "Protect open space"}
+            </p>
+            <p className="mt-2 text-[12px] leading-5 text-foreground/78">
+              {primary?.explanation ?? "Nothing urgent is pressing right now."}
+            </p>
+            {primary?.scoreBreakdown.length ? (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {primary.scoreBreakdown.slice(0, 3).map((signal) => (
+                  <span key={signal} className="rounded-full border hairline bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] text-muted-foreground">
+                    {signal}
+                  </span>
+                ))}
               </div>
-              <Link href="/agenda" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
-                Open agenda
-              </Link>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {todayGroup?.entries.length ? (
-                todayGroup.entries.slice(0, 5).map((entry) =>
-                  entry.kind === "event" && entry.event ? (
-                    <EventCard key={entry.id} event={entry.event} compact />
-                  ) : entry.task ? (
-                    <LifeItemCard
-                      key={entry.id}
-                      compact
-                      item={entry.task}
-                      onCompleteTask={() => completeTask(entry.task!.id)}
-                      onMoveTaskToTomorrow={() => moveTaskToTomorrow(entry.task!.id)}
-                      onStartTask={() => startTask(entry.task!.id)}
-                      onToggleFocus={() => toggleFocusToday(entry.task!.id)}
-                      isFocused={focusTodayIds.includes(entry.task!.id)}
-                    />
-                  ) : null,
-                )
-              ) : (
-                <EmptyState
-                  icon={CalendarClock}
-                  title="Today still has breathing room"
-                  description="No tasks or events are currently tied to today."
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="surface-card rounded-xl border hairline">
-            <CardHeader className="flex flex-row items-start justify-between gap-4">
-              <div>
-                <CardTitle className="text-xl font-semibold tracking-tight">
-                  At-risk workspaces
-                </CardTitle>
-                <p className="mt-1.5 text-[13px] leading-5 text-muted-foreground">
-                  The contexts most likely to slip next, whether they are classes, study tracks, or
-                  life admin.
-                </p>
+            ) : null}
+            {primary ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => startTask(primary.item.id)}>
+                  Start now
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => moveTaskToTomorrow(primary.item.id)}>
+                  Tomorrow
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => completeTask(primary.item.id)}>
+                  Done
+                </Button>
               </div>
-              <Link href="/workspaces?view=at-risk" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
-                Open workspaces
+            ) : null}
+          </div>
+
+          <div className="rounded-xl border hairline bg-background/58 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                  What changed
+                </p>
+                <p className="mt-1 text-[12px] text-foreground/78">Orbit receipts and system updates land here first.</p>
+              </div>
+              <Link href="/assistant" className="text-[11px] font-medium text-primary underline-offset-4 hover:underline">
+                Open workbench
               </Link>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {atRisk.length ? (
-                atRisk.map((risk) => (
+            </div>
+            <div className="mt-3 grid gap-2">
+              {briefings.length ? (
+                briefings.map((item) => (
                   <Link
-                    key={risk.workspace.id}
-                    href={`/workspaces/${risk.workspace.id}`}
-                    className="block rounded-lg border hairline bg-card/80 p-3.5 transition-transform hover:-translate-y-0.5"
+                    key={item.id}
+                    href={item.href ?? "/assistant"}
+                    className="rounded-lg border hairline bg-[var(--surface-soft)]/88 px-3 py-2 text-[11px] text-muted-foreground transition-colors hover:bg-[var(--surface-soft)]"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-[13px] font-medium text-foreground">
-                          {risk.workspace.name}
-                        </p>
-                        <p className="mt-1 text-[12px] text-muted-foreground">{risk.reason}</p>
-                      </div>
-                      <span className="rounded-md border hairline bg-[var(--surface-soft)] px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
-                        {risk.workspace.shortLabel}
-                      </span>
-                    </div>
+                    <span className="font-medium text-foreground">{item.label}</span>
+                    <span className="mx-1 text-muted-foreground/70">·</span>
+                    {item.summary}
                   </Link>
                 ))
               ) : (
-                <EmptyState
-                  icon={TrendingUp}
-                  title="No workspace is clearly slipping"
-                  description="The current mix of coursework, study tracks, and life admin still looks stable."
-                />
+                <p className="rounded-lg border hairline bg-[var(--surface-soft)]/88 px-3 py-2 text-[11px] text-muted-foreground">
+                  No assistant receipts yet. Run a command from the assistant to start building the board history.
+                </p>
               )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.5fr)_320px]">
+        <div className="space-y-3">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+            {widgetData.map((entry) => {
+              const href =
+                entry.widget.kind === "assistant_summary" || entry.widget.kind === "quick_actions"
+                  ? "/assistant"
+                  : entry.widget.href;
+
+              return (
+                <Link
+                  key={entry.widget.id}
+                  href={href}
+                  className={cn(
+                    "surface-card rounded-xl border hairline p-3.5 transition-transform duration-150 hover:-translate-y-0.5",
+                    entry.widget.layout === "wide" ? "md:col-span-2 xl:col-span-3" : "xl:col-span-2",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <span className={cn("inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.16em]", ACCENT_STYLES[entry.widget.accent])}>
+                      {entry.accentLabel}
+                    </span>
+                    <LayoutGrid className="size-3.5 text-muted-foreground" />
+                  </div>
+                  <h3 className="mt-3 text-[15px] font-semibold tracking-tight text-foreground">{entry.headline}</h3>
+                  <p className="mt-1.5 text-[12px] leading-5 text-muted-foreground">{entry.detail}</p>
+                  {entry.stats.length ? (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {entry.stats.map((stat) => (
+                        <span key={stat} className="rounded-full border hairline bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] text-muted-foreground">
+                          {stat}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+
+        <aside className="space-y-3">
+          <Card className="surface-card rounded-xl border hairline">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg font-semibold tracking-tight">Briefing summary</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2.5 text-[12px] leading-5 text-muted-foreground">
+              <p>{narrative}</p>
+              <div className="rounded-xl border hairline bg-[var(--surface-soft)]/86 p-3">
+                <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-foreground/82">Assistant route</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">Use `/assistant` for widget rebuilds, plans, receipts, and schedule control.</p>
+              </div>
             </CardContent>
           </Card>
-        </div>
-      </section>
+
+          <OverloadWarningCard assessment={overload} />
+          <BuddyPanel insight={buddyInsight} plan={plan} />
+          <ConstraintCard constraintProfile={constraintProfile} />
+
+          <Card className="surface-card rounded-xl border hairline">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg font-semibold tracking-tight">Quick actions</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Link href="/assistant" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full justify-start")}>
+                <Sparkles className="size-4" />
+                Open assistant workbench
+              </Link>
+              <Link href="/calendar?view=rebalance" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full justify-start")}>
+                <CalendarClock className="size-4" />
+                Rebalance schedule
+              </Link>
+              <Link href="/assignments?scope=overdue" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full justify-start")}>
+                <ArrowRight className="size-4" />
+                Open urgent assignments
+              </Link>
+            </CardContent>
+          </Card>
+        </aside>
+      </div>
     </div>
   );
 }

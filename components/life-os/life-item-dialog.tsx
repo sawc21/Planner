@@ -1,6 +1,4 @@
-"use client";
-
-import { MapPin, Play, Sparkles, Wallet } from "lucide-react";
+﻿import { MapPin, Play, Sparkles, Wallet } from "lucide-react";
 
 import { ItemPillBadges } from "@/components/life-os/item-pill-badges";
 import { Button } from "@/components/ui/button";
@@ -37,13 +35,15 @@ export function LifeItemDialog({
   isFocused: boolean;
 }) {
   const isComplete = item.status === "done" || item.status === "paid";
+  const workspace = item.workspace ?? {
+    name: "General",
+    ownerLabel: "Orbit",
+  };
 
   return (
     <Dialog>
       <DialogTrigger
-        render={
-          <Button variant="ghost" size="sm" className="text-muted-foreground" />
-        }
+        render={<Button variant="ghost" size="sm" className="text-muted-foreground" />}
       >
         Details
       </DialogTrigger>
@@ -63,7 +63,7 @@ export function LifeItemDialog({
               Workspace
             </p>
             <p className="text-[13px] text-foreground">
-              {item.workspace.name} · {item.workspace.ownerLabel}
+              {workspace.name} · {workspace.ownerLabel}
             </p>
           </div>
           <div className="space-y-1">

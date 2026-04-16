@@ -1,4 +1,4 @@
-import {
+﻿import {
   addDays,
   differenceInCalendarDays,
   eachDayOfInterval,
@@ -10,19 +10,26 @@ import {
   isToday,
   parseISO,
   startOfDay,
+  startOfWeek,
 } from "date-fns";
 
 import type {
   AgendaDayGroup,
   AgendaEntry,
+  AssistantResultCard,
+  AssistantReceipt,
+  CommandResult,
   ConstraintProfile,
+  DashboardWidget,
   Event,
   EventView,
-  Gradebook,
+  GradeWhatIfCard,
+  HomeWidgetData,
+  HomeBriefingItem,
   LifeOsSnapshot,
   OverloadAssessment,
   ProgressCard,
-  ProgressRecord,
+  ProjectMilestone,
   StudyBuddyInsight,
   StudyPlan,
   StudyPlanStep,
@@ -41,6 +48,19 @@ const PRIORITY_WEIGHTS = {
   critical: 46,
 } as const;
 
+const FALLBACK_WORKSPACE: Workspace = {
+  id: "general",
+  name: "Independent",
+  shortLabel: "GENERAL",
+  kind: "project",
+  colorToken: "bg-stone-200 text-stone-950",
+  icon: "folder-open",
+  ownerLabel: "Orbit OS",
+  progressSummary: "Independent work that is not tied to a specific workspace.",
+  active: true,
+  projectHealth: "watch",
+};
+
 type ScoreSignal = {
   label: string;
   summary: string;
@@ -52,26 +72,45 @@ function getTaskDate(task: Task) {
   return source ? parseISO(source) : undefined;
 }
 
-function getWorkspaceById(workspaces: Workspace[], workspaceId: string) {
+function getWorkspaceById(workspaces: Workspace[], workspaceId?: string) {
+  if (!workspaceId) {
+    return undefined;
+  }
+
   return workspaces.find((workspace) => workspace.id === workspaceId);
 }
 
-function attachTaskWorkspace(tasks: Task[], workspaces: Workspace[]) {
-  return tasks
-    .map((task) => {
-      const workspace = getWorkspaceById(workspaces, task.workspaceId);
-      return workspace ? ({ ...task, workspace } satisfies TaskView) : undefined;
-    })
-    .filter((task): task is TaskView => Boolean(task));
+function taskTouchesWorkspace(task: Task, workspaceId: string) {
+  return (
+    task.primaryWorkspaceId === workspaceId ||
+    task.linkedWorkspaceIds.includes(workspaceId)
+  );
+}
+
+function attachTaskWorkspaces(tasks: Task[], workspaces: Workspace[]) {
+  return tasks.map((task) => {
+    const workspace =
+      getWorkspaceById(workspaces, task.primaryWorkspaceId) ??
+      getWorkspaceById(workspaces, task.linkedWorkspaceIds[0]) ??
+      FALLBACK_WORKSPACE;
+    const linkedWorkspaces = [
+      ...new Map(
+        [task.primaryWorkspaceId, ...task.linkedWorkspaceIds]
+          .map((workspaceId) => getWorkspaceById(workspaces, workspaceId))
+          .filter((entry): entry is Workspace => Boolean(entry))
+          .map((resolvedWorkspace) => [resolvedWorkspace.id, resolvedWorkspace]),
+      ).values(),
+    ];
+
+    return { ...task, workspace, linkedWorkspaces } satisfies TaskView;
+  });
 }
 
 function attachEventWorkspace(events: Event[], workspaces: Workspace[]) {
-  return events
-    .map((event) => {
-      const workspace = getWorkspaceById(workspaces, event.workspaceId);
-      return workspace ? ({ ...event, workspace } satisfies EventView) : undefined;
-    })
-    .filter((event): event is EventView => Boolean(event));
+  return events.map((event) => ({
+    ...event,
+    workspace: getWorkspaceById(workspaces, event.workspaceId) ?? FALLBACK_WORKSPACE,
+  })) satisfies EventView[];
 }
 
 function compareTasksByUrgency(a: TaskView, b: TaskView) {
@@ -89,10 +128,6 @@ function compareTasksByUrgency(a: TaskView, b: TaskView) {
   return a.title.localeCompare(b.title);
 }
 
-function compareAgendaEntry(a: AgendaEntry, b: AgendaEntry) {
-  return parseISO(a.timestamp).getTime() - parseISO(b.timestamp).getTime();
-}
-
 function isTaskComplete(task: Task) {
   return task.status === "done" || task.status === "paid";
 }
@@ -104,6 +139,7 @@ function buildSignals(
 ): ScoreSignal[] {
   const signals: ScoreSignal[] = [];
   const taskDate = getTaskDate(task);
+  const workspace = task.workspace ?? FALLBACK_WORKSPACE;
 
   signals.push({
     label: `${task.priority[0].toUpperCase()}${task.priority.slice(1)} priority +${PRIORITY_WEIGHTS[task.priority]}`,
@@ -127,7 +163,7 @@ function buildSignals(
     });
   }
 
-  if (task.workspace.kind === "course" && task.workspace.currentGrade != null && task.workspace.currentGrade < 85) {
+  if (workspace.kind === "course" && workspace.currentGrade != null && workspace.currentGrade < 87) {
     signals.push({
       label: "Grade risk +16",
       summary: "its course grade is under pressure",
@@ -135,11 +171,11 @@ function buildSignals(
     });
   }
 
-  if (task.workspace.kind === "study_track") {
+  if (workspace.kind === "project" && workspace.projectHealth === "risk") {
     signals.push({
-      label: "Momentum +10",
-      summary: "it keeps a study track moving",
-      value: 10,
+      label: "Project health +12",
+      summary: "its project is slipping",
+      value: 12,
     });
   }
 
@@ -201,35 +237,84 @@ function buildReason(signals: ScoreSignal[]) {
     : "Start here because it offers the cleanest next move.";
 }
 
-function calculateGradeRiskScore(gradebook: Gradebook | undefined) {
-  if (!gradebook) {
-    return 0;
-  }
-
-  const gap = gradebook.targetGrade - gradebook.currentGrade;
-  return gap > 0 ? gap * 2 : 0;
+function compareAgendaEntry(a: AgendaEntry, b: AgendaEntry) {
+  return parseISO(a.timestamp).getTime() - parseISO(b.timestamp).getTime();
 }
 
-function calculateProgressRiskScore(record: ProgressRecord) {
-  const ratio = record.currentValue / Math.max(record.targetValue, 1);
-  const dueSoon = record.dueAt
-    ? differenceInCalendarDays(parseISO(record.dueAt), new Date()) <= 7
-    : false;
+function calculateCourseRisk(
+  workspace: Workspace,
+  tasks: TaskView[],
+  data: Pick<LifeOsSnapshot, "gradebooks">,
+  referenceDate: Date,
+) {
+  const overdueTasks = tasks.filter((task) => {
+    const taskDate = getTaskDate(task);
+    return Boolean(taskDate && isBefore(taskDate, startOfDay(referenceDate)));
+  }).length;
+  const highUrgency = tasks.filter((task) => {
+    const taskDate = getTaskDate(task);
+    return Boolean(
+      taskDate &&
+        differenceInCalendarDays(taskDate, referenceDate) <= 2 &&
+        (task.priority === "critical" || task.priority === "high"),
+    );
+  }).length;
+  const gradebook = data.gradebooks.find((entry) => entry.workspaceId === workspace.id);
+  const gradeRisk =
+    gradebook && gradebook.targetGrade > gradebook.currentGrade
+      ? (gradebook.targetGrade - gradebook.currentGrade) * 2
+      : 0;
 
-  return (ratio < 0.7 ? 18 : 8) + (dueSoon ? 8 : 0);
+  return {
+    score: overdueTasks * 18 + highUrgency * 14 + gradeRisk,
+    signals: [
+      overdueTasks ? `${overdueTasks} overdue` : undefined,
+      highUrgency ? `${highUrgency} urgent` : undefined,
+      gradeRisk ? `${workspace.currentGrade}% grade` : undefined,
+    ].filter(Boolean) as string[],
+  };
+}
+
+function calculateProjectRisk(
+  workspace: Workspace,
+  tasks: TaskView[],
+  milestones: ProjectMilestone[],
+  referenceDate: Date,
+) {
+  const overdueTasks = tasks.filter((task) => {
+    const taskDate = getTaskDate(task);
+    return Boolean(taskDate && isBefore(taskDate, startOfDay(referenceDate)));
+  }).length;
+  const milestoneRisk = milestones
+    .filter((milestone) => milestone.workspaceId === workspace.id)
+    .reduce((sum, milestone) => {
+      const dueSoon = milestone.dueAt
+        ? differenceInCalendarDays(parseISO(milestone.dueAt), referenceDate) <= 3
+        : false;
+      return sum + (milestone.status !== "complete" && dueSoon ? 20 : 0);
+    }, 0);
+  const healthRisk =
+    workspace.projectHealth === "risk" ? 18 : workspace.projectHealth === "watch" ? 8 : 0;
+
+  return {
+    score: overdueTasks * 16 + milestoneRisk + healthRisk,
+    signals: [
+      overdueTasks ? `${overdueTasks} overdue` : undefined,
+      milestoneRisk ? "milestone due soon" : undefined,
+      workspace.projectHealth === "risk" ? "project health at risk" : undefined,
+    ].filter(Boolean) as string[],
+  };
 }
 
 export function getTaskViews(data: Pick<LifeOsSnapshot, "tasks" | "workspaces">) {
-  return attachTaskWorkspace(data.tasks, data.workspaces);
+  return attachTaskWorkspaces(data.tasks, data.workspaces);
 }
 
 export function getEventViews(data: Pick<LifeOsSnapshot, "events" | "workspaces">) {
   return attachEventWorkspace(data.events, data.workspaces);
 }
 
-export function getIncompleteTasks(
-  data: Pick<LifeOsSnapshot, "tasks" | "workspaces">,
-) {
+export function getIncompleteTasks(data: Pick<LifeOsSnapshot, "tasks" | "workspaces">) {
   return getTaskViews(data).filter((task) => !isTaskComplete(task));
 }
 
@@ -262,7 +347,7 @@ export function getTodayTasks(
 export function getUpcomingTasks(
   data: Pick<LifeOsSnapshot, "tasks" | "workspaces">,
   referenceDate = new Date(),
-  limit = 6,
+  limit = 8,
 ) {
   const start = startOfDay(referenceDate);
   const end = endOfDay(addDays(start, 7));
@@ -272,6 +357,16 @@ export function getUpcomingTasks(
       const taskDate = getTaskDate(task);
       return Boolean(taskDate && !isBefore(taskDate, start) && !isAfter(taskDate, end));
     })
+    .sort(compareTasksByUrgency)
+    .slice(0, limit);
+}
+
+export function getUrgentDeadlines(
+  data: Pick<LifeOsSnapshot, "tasks" | "workspaces">,
+  referenceDate = new Date(),
+  limit = 6,
+) {
+  return [...getOverdueTasks(data, referenceDate), ...getTodayTasks(data, referenceDate)]
     .sort(compareTasksByUrgency)
     .slice(0, limit);
 }
@@ -319,18 +414,17 @@ export function getOverloadAssessment(
     (task) => task.priority === "high" || task.priority === "critical",
   ).length;
   const todayMinutes = todayTasks.reduce((sum, task) => sum + (task.estimatedMinutes ?? 0), 0);
-  const hoursPressure = todayMinutes > data.constraintProfile.hoursRemainingThisWeek * 60;
 
-  if (overdueCount >= 3 || highPriorityCount >= 4 || hoursPressure) {
+  if (overdueCount >= 3 || highPriorityCount >= 4 || todayMinutes > 360) {
     return {
       isOverloaded: true,
       severity: "overloaded",
       reason:
         overdueCount >= 3
-          ? `${overdueCount} overdue tasks are still pulling on the week.`
+          ? `${overdueCount} overdue commitments are still pulling on the week.`
           : highPriorityCount >= 4
-            ? `${highPriorityCount} high-stakes tasks are stacked onto the same day.`
-            : `Today's visible work is heavier than the ${data.constraintProfile.hoursRemainingThisWeek} hours left in the week budget.`,
+            ? `${highPriorityCount} high-stakes items are stacked on the same day.`
+            : `Today's visible load is heavier than a 6-hour study-and-work margin.`,
       suggestedAction:
         "Finish one overdue or short task first, then move one medium-weight item before the day starts widening.",
     };
@@ -349,7 +443,7 @@ export function getOverloadAssessment(
   return {
     isOverloaded: false,
     severity: "calm",
-    reason: "The current mix of work, study, and life admin still looks workable.",
+    reason: "The current mix of school, projects, and life admin still looks workable.",
     suggestedAction: "Use the open room to close one meaningful task before expanding the plan.",
   };
 }
@@ -358,7 +452,7 @@ export function getAgendaGroups(
   data: Pick<LifeOsSnapshot, "tasks" | "events" | "workspaces">,
   referenceDate = new Date(),
 ): AgendaDayGroup[] {
-  const start = startOfDay(referenceDate);
+  const start = startOfWeek(referenceDate, { weekStartsOn: 1 });
   const end = addDays(start, 6);
   const days = eachDayOfInterval({ start, end });
   const taskViews = getIncompleteTasks(data);
@@ -387,11 +481,36 @@ export function getAgendaGroups(
       }));
 
     const entries = [...taskEntries, ...eventEntries].sort(compareAgendaEntry);
+    const totalMinutes = entries.reduce((sum, entry) => {
+      if (entry.kind === "task" && entry.task) {
+        return sum + (entry.task.estimatedMinutes ?? 45);
+      }
+
+      if (entry.event?.endAt) {
+        const minutes =
+          (parseISO(entry.event.endAt).getTime() - parseISO(entry.event.startAt).getTime()) /
+          60000;
+        return sum + minutes;
+      }
+
+      return sum + 60;
+    }, 0);
     const pressureCount = entries.filter((entry) =>
       entry.kind === "task"
         ? entry.task?.priority === "high" || entry.task?.priority === "critical"
         : entry.event?.priority === "high" || entry.event?.priority === "critical",
     ).length;
+    const openWindows: string[] = [];
+
+    if (totalMinutes < 240) {
+      openWindows.push("Late afternoon open");
+    }
+    if (totalMinutes < 360) {
+      openWindows.push("Evening block available");
+    }
+    if (!entries.length) {
+      openWindows.push("Wide-open day");
+    }
 
     return {
       key: format(day, "yyyy-MM-dd"),
@@ -407,15 +526,14 @@ export function getAgendaGroups(
               ? "Manageable"
               : "Open",
       entries,
+      openWindows,
+      loadPercent: Math.min(100, Math.round((totalMinutes / 480) * 100)),
     };
   });
 }
 
 export function getAtRiskWorkspaces(
-  data: Pick<
-    LifeOsSnapshot,
-    "workspaces" | "tasks" | "gradebooks" | "progressRecords"
-  >,
+  data: Pick<LifeOsSnapshot, "workspaces" | "tasks" | "gradebooks" | "milestones">,
   referenceDate = new Date(),
   limit = 4,
 ) {
@@ -423,42 +541,20 @@ export function getAtRiskWorkspaces(
 
   return data.workspaces
     .map((workspace) => {
-      const workspaceTasks = taskViews.filter((task) => task.workspaceId === workspace.id);
-      const overdueTasks = workspaceTasks.filter((task) => {
-        const taskDate = getTaskDate(task);
-        return Boolean(taskDate && isBefore(taskDate, startOfDay(referenceDate)));
-      }).length;
-      const upcomingCritical = workspaceTasks.filter(
-        (task) =>
-          (task.priority === "critical" || task.priority === "high") &&
-          (() => {
-            const taskDate = getTaskDate(task);
-            return Boolean(taskDate && differenceInCalendarDays(taskDate, referenceDate) <= 2);
-          })(),
-      ).length;
-      const gradebook = data.gradebooks.find((entry) => entry.workspaceId === workspace.id);
-      const progress = data.progressRecords.filter((record) => record.workspaceId === workspace.id);
-      const progressRisk = progress.reduce(
-        (sum, record) => sum + calculateProgressRiskScore(record),
-        0,
-      );
-      const gradeRisk = calculateGradeRiskScore(gradebook);
-      const score = overdueTasks * 18 + upcomingCritical * 14 + gradeRisk + progressRisk;
-      const signals = [
-        overdueTasks ? `${overdueTasks} overdue` : undefined,
-        upcomingCritical ? `${upcomingCritical} urgent` : undefined,
-        gradeRisk ? `${workspace.currentGrade}% grade` : undefined,
-        progressRisk ? "progress slipping" : undefined,
-      ].filter(Boolean) as string[];
+      const workspaceTasks = taskViews.filter((task) => taskTouchesWorkspace(task, workspace.id));
+      const risk =
+        workspace.kind === "course"
+          ? calculateCourseRisk(workspace, workspaceTasks, data, referenceDate)
+          : calculateProjectRisk(workspace, workspaceTasks, data.milestones, referenceDate);
 
       return {
         workspace,
-        score,
+        score: risk.score,
         reason:
-          signals.length > 0
-            ? `${workspace.shortLabel} is carrying ${signals.join(", ")}.`
+          risk.signals.length > 0
+            ? `${workspace.shortLabel} is carrying ${risk.signals.join(", ")}.`
             : `${workspace.shortLabel} is currently stable.`,
-        signals,
+        signals: risk.signals,
       } satisfies WorkspaceRisk;
     })
     .filter((risk) => risk.score > 0)
@@ -466,10 +562,7 @@ export function getAtRiskWorkspaces(
     .slice(0, limit);
 }
 
-export function getWorkspaceBundle(
-  data: LifeOsSnapshot,
-  workspaceId: string,
-) {
+export function getWorkspaceBundle(data: LifeOsSnapshot, workspaceId: string) {
   const workspace = data.workspaces.find((entry) => entry.id === workspaceId);
 
   if (!workspace) {
@@ -479,27 +572,24 @@ export function getWorkspaceBundle(
   return {
     workspace,
     tasks: getTaskViews(data)
-      .filter((task) => task.workspaceId === workspaceId)
+      .filter((task) => taskTouchesWorkspace(task, workspaceId))
       .sort(compareTasksByUrgency),
     events: getEventViews(data)
-      .filter((event) => event.workspaceId === workspaceId)
+      .filter((event) => event.workspace?.id === workspaceId)
       .sort((a, b) => parseISO(a.startAt).getTime() - parseISO(b.startAt).getTime()),
     materials: data.materials.filter((material) => material.workspaceId === workspaceId),
+    milestones: data.milestones.filter((milestone) => milestone.workspaceId === workspaceId),
     gradebook: data.gradebooks.find((entry) => entry.workspaceId === workspaceId),
-    progress: data.progressRecords.filter((entry) => entry.workspaceId === workspaceId),
   };
 }
 
 export function getConstraintAwarePlan(
-  data: Pick<
-    LifeOsSnapshot,
-    "tasks" | "workspaces" | "constraintProfile" | "gradebooks" | "progressRecords"
-  >,
+  data: Pick<LifeOsSnapshot, "tasks" | "workspaces" | "constraintProfile">,
   workspaceId?: string,
   referenceDate = new Date(),
 ): StudyPlan {
   const taskPool = workspaceId
-    ? getIncompleteTasks(data).filter((task) => task.workspaceId === workspaceId)
+    ? getIncompleteTasks(data).filter((task) => taskTouchesWorkspace(task, workspaceId))
     : getIncompleteTasks(data);
   const recommendations = getTodayRecommendations(data, referenceDate);
   const preferredTasks =
@@ -508,34 +598,34 @@ export function getConstraintAwarePlan(
       : recommendations.primary
         ? [recommendations.primary.item, ...recommendations.secondary.map((entry) => entry.item)]
         : [];
-
   const availableMinutes = data.constraintProfile.hoursRemainingThisWeek * 60;
   let consumed = 0;
 
   const steps: StudyPlanStep[] = preferredTasks.map((task) => {
-    const minutes = Math.min(task.estimatedMinutes ?? 30, Math.max(20, availableMinutes - consumed));
+    const workspace = task.workspace ?? FALLBACK_WORKSPACE;
+    const remaining = Math.max(20, availableMinutes - consumed);
+    const minutes = Math.min(task.estimatedMinutes ?? 30, remaining);
     consumed += minutes;
 
     return {
       id: `${task.id}-step`,
       title: task.title,
       reason:
-        task.workspace.kind === "course"
+        workspace.kind === "course"
           ? "It moves a graded or time-sensitive academic commitment."
-          : task.workspace.kind === "study_track"
-            ? "It keeps momentum in a structured learning flow."
-            : "It reduces admin drag and buys room for the rest of the week.",
+          : workspace.id === "general"
+            ? "It reduces life-admin drag and buys room for the rest of the week."
+            : "It keeps an active project shipping without widening the day.",
       minutes,
-      workspaceId: task.workspaceId,
+      workspaceId: workspace.id === "general" ? undefined : workspace.id,
     };
   });
 
   return {
-    title: workspaceId ? "Focused study flow" : "Constraint-aware plan",
-    summary:
-      workspaceId
-        ? `This flow respects the remaining ${data.constraintProfile.hoursRemainingThisWeek} hours while keeping the selected workspace moving.`
-        : `This plan balances study, life admin, and work against the ${data.constraintProfile.hoursRemainingThisWeek} hours and $${data.constraintProfile.budgetRemainingThisWeek} still available this week.`,
+    title: workspaceId ? "Focused workspace plan" : "Constraint-aware weekly plan",
+    summary: workspaceId
+      ? `This flow respects the remaining ${data.constraintProfile.hoursRemainingThisWeek} hours while keeping the selected workspace moving.`
+      : `This plan balances school, projects, and life admin against ${data.constraintProfile.hoursRemainingThisWeek} hours and $${data.constraintProfile.budgetRemainingThisWeek} still available this week.`,
     steps,
   };
 }
@@ -543,7 +633,7 @@ export function getConstraintAwarePlan(
 export function getBuddyInsight(
   data: Pick<
     LifeOsSnapshot,
-    "tasks" | "workspaces" | "constraintProfile" | "gradebooks" | "progressRecords"
+    "tasks" | "workspaces" | "events" | "materials" | "widgets" | "constraintProfile" | "gradebooks" | "milestones"
   >,
   workspaceId?: string,
   referenceDate = new Date(),
@@ -556,7 +646,7 @@ export function getBuddyInsight(
 
     if (!bundle) {
       return {
-        title: "Planning Buddy",
+        title: "Orbit Assistant",
         summary: "This workspace does not have enough context yet.",
         bullets: ["Add one task or material to give the workspace shape."],
         actionLabel: "Open workspaces",
@@ -565,53 +655,47 @@ export function getBuddyInsight(
     }
 
     return {
-      title:
-        bundle.workspace.kind === "course" ? "Study Buddy" : "Planning Buddy",
+      title: bundle.workspace.kind === "course" ? "Study Assistant" : "Project Assistant",
       summary:
         bundle.workspace.kind === "course"
           ? `${bundle.workspace.shortLabel} needs a tighter sequence between assignments, class time, and grade pressure.`
-          : `${bundle.workspace.shortLabel} will move best with one narrow session instead of a long catch-up block.`,
+          : `${bundle.workspace.shortLabel} will move best with one narrow shipping block instead of a long catch-up session.`,
       bullets: [
         bundle.tasks[0]
           ? `Open with ${bundle.tasks[0].title.toLowerCase()}.`
           : "Start by adding one concrete task to this workspace.",
         bundle.materials[0]
-          ? `Use ${bundle.materials[0].title.toLowerCase()} as the source material.`
-          : "Add one material summary so the workspace has context to plan against.",
+          ? `Use ${bundle.materials[0].title.toLowerCase()} as the source context.`
+          : "Add one material summary so the assistant has planning context.",
         bundle.gradebook
           ? `Protect the grade floor while aiming for ${bundle.gradebook.targetGrade}%.`
-          : "Keep progress moving with shorter, repeatable sessions.",
+          : bundle.milestones[0]
+            ? `Keep ${bundle.milestones[0].title.toLowerCase()} moving this week.`
+            : "Keep momentum with shorter, repeatable sessions.",
       ],
-      actionLabel: "See full plan",
-      actionHref: "/command",
+      actionLabel: "Open assistant",
+      actionHref: "/assistant",
     };
   }
 
   return {
-    title: "Planning Buddy",
+    title: "Orbit Assistant",
     summary:
       atRisk && recommendation
         ? `${atRisk.workspace.shortLabel} is the most exposed workspace, and ${recommendation.item.title.toLowerCase()} is the cleanest place to relieve pressure.`
         : "The board is steady enough to keep the next move simple.",
     bullets: [
-      recommendation
-        ? `Start with ${recommendation.item.title.toLowerCase()}.`
-        : "Use one short task as your anchor.",
-      atRisk
-        ? `Watch ${atRisk.workspace.name.toLowerCase()} next.`
-        : "No workspace is clearly slipping right now.",
+      recommendation ? `Start with ${recommendation.item.title.toLowerCase()}.` : "Use one short task as your anchor.",
+      atRisk ? `Watch ${atRisk.workspace.name.toLowerCase()} next.` : "No workspace is clearly slipping right now.",
       `You still have ${data.constraintProfile.hoursRemainingThisWeek} hours and $${data.constraintProfile.budgetRemainingThisWeek} to plan around this week.`,
     ],
-    actionLabel: "Build study flow",
-    actionHref: "/command",
+    actionLabel: "Open assistant",
+    actionHref: "/assistant",
   };
 }
 
 export function buildDailyNarrative(
-  data: Pick<
-    LifeOsSnapshot,
-    "tasks" | "workspaces" | "constraintProfile" | "gradebooks" | "progressRecords"
-  >,
+  data: Pick<LifeOsSnapshot, "tasks" | "workspaces" | "constraintProfile" | "gradebooks" | "milestones">,
   referenceDate = new Date(),
 ) {
   const recommendation = getTodayRecommendations(data, referenceDate).primary;
@@ -634,10 +718,7 @@ export function buildDailyNarrative(
 }
 
 export function getProgressCards(
-  data: Pick<
-    LifeOsSnapshot,
-    "workspaces" | "gradebooks" | "progressRecords" | "tasks"
-  >,
+  data: Pick<LifeOsSnapshot, "workspaces" | "gradebooks" | "milestones" | "tasks">,
 ) {
   const taskViews = getTaskViews(data);
 
@@ -653,65 +734,304 @@ export function getProgressCards(
           100,
           Math.max(
             0,
-            Math.round(
-              gradebook.targetGrade + (gradebook.targetGrade - gradebook.currentGrade) * 1.5,
-            ),
+            Math.round(gradebook.targetGrade + (gradebook.targetGrade - gradebook.currentGrade) * 1.5),
           ),
         )
       : undefined;
 
-    return [{
-      workspace,
-      title: `${gradebook.currentGrade}% current grade`,
-      detail: nextPlanned
-        ? `${nextPlanned.title} is the next grade-moving item.`
-        : "No planned grade items are visible right now.",
-      currentValue: gradebook.currentGrade,
-      targetValue: gradebook.targetGrade,
-      neededOnNext,
-    } satisfies ProgressCard];
+    return [
+      {
+        workspace,
+        title: `${gradebook.currentGrade}% current grade`,
+        detail: nextPlanned
+          ? `${nextPlanned.title} is the next grade-moving item.`
+          : "No planned grade items are visible right now.",
+        currentValue: gradebook.currentGrade,
+        targetValue: gradebook.targetGrade,
+        neededOnNext,
+      } satisfies ProgressCard,
+    ];
   });
 
-  const trackCards = data.progressRecords.flatMap((record) => {
-    const workspace = data.workspaces.find((entry) => entry.id === record.workspaceId);
+  const projectCards = data.workspaces
+    .filter((workspace) => workspace.kind === "project")
+    .map((workspace) => {
+      const milestones = data.milestones.filter((entry) => entry.workspaceId === workspace.id);
+      const averageProgress = milestones.length
+        ? Math.round(
+            milestones.reduce((sum, milestone) => sum + milestone.progressPercent, 0) /
+              milestones.length,
+          )
+        : 0;
+      const openTasks = taskViews.filter(
+        (task) => taskTouchesWorkspace(task, workspace.id) && !isTaskComplete(task),
+      ).length;
+
+      return {
+        workspace,
+        title: `${averageProgress}% milestone progress`,
+        detail: `${openTasks} open linked tasks are still moving this project.`,
+        currentValue: averageProgress,
+        targetValue: 100,
+      } satisfies ProgressCard;
+    });
+
+  return { courseCards, projectCards };
+}
+
+export function getGradeWhatIfCards(data: Pick<LifeOsSnapshot, "workspaces" | "gradebooks">) {
+  return data.gradebooks.flatMap((gradebook) => {
+    const workspace = data.workspaces.find((entry) => entry.id === gradebook.workspaceId);
     if (!workspace) {
       return [];
     }
 
-    return [{
-      workspace,
-      title: `${record.currentValue}/${record.targetValue} ${record.unit}`,
-      detail:
-        record.confidence === "low"
-          ? "Confidence is slipping enough that a shorter, more frequent plan would help."
-          : "Momentum is still acceptable, but the track benefits from consistency.",
-      currentValue: record.currentValue,
-      targetValue: record.targetValue,
-    } satisfies ProgressCard];
-  });
+    const nextItem = gradebook.items.find((item) => item.status === "planned");
+    const neededScore = nextItem
+      ? Math.min(
+          100,
+          Math.max(
+            0,
+            Math.round(gradebook.targetGrade + (gradebook.targetGrade - gradebook.currentGrade) * 1.25),
+          ),
+        )
+      : undefined;
+    const category = nextItem
+      ? gradebook.categories.find((entry) => entry.id === nextItem.categoryId)
+      : undefined;
 
-  const lifeCards: ProgressCard[] = data.workspaces
-    .filter((workspace) => workspace.kind === "personal" || workspace.kind === "work" || workspace.kind === "admin")
-    .map((workspace) => {
-      const workspaceTasks = taskViews.filter((task) => task.workspaceId === workspace.id);
-      const completedCount = workspaceTasks.filter((task) => isTaskComplete(task)).length;
-
-      return {
+    return [
+      {
         workspace,
-        title: `${completedCount}/${workspaceTasks.length || 1} tasks complete`,
-        detail: workspace.progressSummary,
-        currentValue: completedCount,
-        targetValue: workspaceTasks.length || undefined,
-      } satisfies ProgressCard;
-    });
+        currentGrade: gradebook.currentGrade,
+        targetGrade: gradebook.targetGrade,
+        nextItemTitle: nextItem?.title,
+        neededScore,
+        categoryLabel: category?.label,
+      } satisfies GradeWhatIfCard,
+    ];
+  });
+}
 
+export function getSemesterGpaSnapshot(data: Pick<LifeOsSnapshot, "workspaces" | "gradebooks">) {
+  const courseWorkspaces = data.workspaces.filter((workspace) => workspace.kind === "course");
+  if (!courseWorkspaces.length) {
+    return { gpa: 0, hours: 0 };
+  }
+
+  const points = courseWorkspaces.reduce((sum, workspace) => {
+    const gradebook = data.gradebooks.find((entry) => entry.workspaceId === workspace.id);
+    const grade = gradebook?.currentGrade ?? workspace.currentGrade ?? 0;
+    const credits = workspace.creditHours ?? 3;
+    const gpaPoints =
+      grade >= 93 ? 4 : grade >= 90 ? 3.7 : grade >= 87 ? 3.3 : grade >= 83 ? 3 : grade >= 80 ? 2.7 : grade >= 77 ? 2.3 : 2;
+    return sum + gpaPoints * credits;
+  }, 0);
+  const hours = courseWorkspaces.reduce((sum, workspace) => sum + (workspace.creditHours ?? 3), 0);
+
+  return { gpa: Number((points / Math.max(hours, 1)).toFixed(2)), hours };
+}
+
+export function getHomeWidgetData(
+  data: Pick<LifeOsSnapshot, "widgets" | "tasks" | "workspaces" | "events" | "constraintProfile" | "gradebooks" | "milestones">,
+  referenceDate = new Date(),
+) {
+  const recommendation = getTodayRecommendations(data, referenceDate).primary;
+  const urgent = getUrgentDeadlines(data, referenceDate, 3);
+  const agenda = getAgendaGroups(data, referenceDate)[0];
+  const atRiskCourses = getAtRiskWorkspaces(data, referenceDate, 3).filter(
+    (entry) => entry.workspace.kind === "course",
+  );
+  const activeProjects = data.workspaces.filter(
+    (workspace) => workspace.kind === "project" && workspace.active,
+  );
+  const narrative = buildDailyNarrative(data, referenceDate);
+
+  return [...data.widgets]
+    .sort((a, b) => a.order - b.order)
+    .map((widget) => {
+      switch (widget.kind) {
+        case "primary_recommendation":
+          return {
+            widget,
+            headline: recommendation?.item.title ?? "Protect some white space",
+            detail: recommendation?.explanation ?? "Nothing urgent is pressing right now.",
+            stats: recommendation ? recommendation.scoreBreakdown.slice(0, 3) : ["Calm board"],
+            accentLabel: "Assistant pick",
+          } satisfies HomeWidgetData;
+        case "assistant_summary":
+          return {
+            widget,
+            headline: "Orbit is shaping the day",
+            detail: narrative,
+            stats: [
+              `${data.constraintProfile.hoursRemainingThisWeek} hours left`,
+              `$${data.constraintProfile.budgetRemainingThisWeek} budget`,
+            ],
+            accentLabel: "Summary",
+          } satisfies HomeWidgetData;
+        case "timeline":
+          return {
+            widget,
+            headline: agenda?.entries.length
+              ? `${agenda.entries.length} items are visible today`
+              : "Today still has breathing room",
+            detail: agenda?.openWindows.join(" · ") ?? "The day is open enough to rebalance.",
+            stats: agenda ? [`${agenda.loadPercent}% load`, agenda.pressureLabel] : ["Open day"],
+            accentLabel: "Timeline",
+          } satisfies HomeWidgetData;
+        case "school_overview":
+          return {
+            widget,
+            headline: atRiskCourses[0]
+              ? `${atRiskCourses[0].workspace.shortLabel} needs attention`
+              : "School is holding steady",
+            detail: atRiskCourses[0]?.reason ?? "No course is clearly slipping right now.",
+            stats: atRiskCourses.slice(0, 2).map((entry) => entry.workspace.shortLabel),
+            accentLabel: "School",
+          } satisfies HomeWidgetData;
+        case "active_projects":
+          return {
+            widget,
+            headline: `${activeProjects.length} active projects are still shipping`,
+            detail:
+              activeProjects[0]?.progressSummary ??
+              "Projects are quiet enough to focus on school first.",
+            stats: activeProjects.slice(0, 3).map((workspace) => workspace.shortLabel),
+            accentLabel: "Projects",
+          } satisfies HomeWidgetData;
+        case "urgent_deadlines":
+          return {
+            widget,
+            headline: urgent[0]?.title ?? "No urgent deadlines right now",
+            detail:
+              urgent[0]?.notes ??
+              "The board does not have a near-term due-date crunch.",
+            stats: urgent.slice(0, 3).map((task) => task.title),
+            accentLabel: "Urgent",
+          } satisfies HomeWidgetData;
+        case "quick_actions":
+          return {
+            widget,
+            headline: "Build dashboard, rebalance schedule, or focus a workspace",
+            detail: "Orbit can update widgets, create study sessions, and explain why a task is winning.",
+            stats: ["Build dashboard", "Generate weekly plan", "Explain priority"],
+            accentLabel: "Actions",
+          } satisfies HomeWidgetData;
+      }
+    });
+}
+
+export function buildWidgetReceipt(widgets: DashboardWidget[]): AssistantReceipt {
   return {
-    courseCards,
-    trackCards,
-    lifeCards,
-  } as {
-    courseCards: ProgressCard[];
-    trackCards: ProgressCard[];
-    lifeCards: ProgressCard[];
+    title: "Dashboard updated",
+    lines: widgets.map((widget) => `${widget.title} is now pinned to Home.`),
+    href: "/home",
   };
 }
+
+function getAssistantCategory(result: CommandResult): AssistantResultCard["category"] {
+  if (result.kind === "dashboard") {
+    return "Dashboard Update";
+  }
+  if (result.kind === "plan") {
+    return "Plan";
+  }
+  if (result.kind === "explanation" || result.kind === "recommendation") {
+    return "Priority Explanation";
+  }
+  if (result.kind === "navigation") {
+    return "Navigation";
+  }
+  return "Action";
+}
+
+function getAssistantAccent(category: AssistantResultCard["category"]): AssistantResultCard["accent"] {
+  if (category === "Dashboard Update") {
+    return "violet";
+  }
+  if (category === "Plan") {
+    return "sky";
+  }
+  if (category === "Priority Explanation") {
+    return "amber";
+  }
+  if (category === "Navigation") {
+    return "emerald";
+  }
+  return "rose";
+}
+
+export function getAssistantResultCards(results: CommandResult[]): AssistantResultCard[] {
+  return results.flatMap((result, index) => {
+    if (result.kind === "message") {
+      return [];
+    }
+
+    const category = getAssistantCategory(result);
+    const accent = getAssistantAccent(category);
+    const lines =
+      "receipt" in result && result.receipt
+        ? result.receipt.lines
+        : result.kind === "plan"
+          ? result.plan.steps.map((step) => `${step.title} · ${step.minutes} min`)
+          : result.kind === "recommendation" && result.recommendation
+            ? result.recommendation.scoreBreakdown
+            : [];
+
+    return [
+      {
+        id: `${result.intent}-${index}`,
+        category,
+        title:
+          "receipt" in result && result.receipt
+            ? result.receipt.title
+            : result.message,
+        summary: result.message,
+        lines,
+        href:
+          "receipt" in result && result.receipt
+            ? result.receipt.href
+            : result.kind === "navigation"
+              ? result.href
+              : undefined,
+        accent,
+      } satisfies AssistantResultCard,
+    ];
+  });
+}
+
+export function getHomeBriefingItems(results: CommandResult[]): HomeBriefingItem[] {
+  return results.flatMap((result, index) => {
+    if (result.kind === "message") {
+      return [];
+    }
+
+    return [
+      {
+        id: `${result.kind}-${index}`,
+        label:
+          result.kind === "dashboard"
+            ? "Dashboard"
+            : result.kind === "plan"
+              ? "Plan"
+              : result.kind === "navigation"
+                ? "Route"
+                : result.kind === "explanation" || result.kind === "recommendation"
+                  ? "Why"
+                  : "Action",
+        summary:
+          "receipt" in result && result.receipt
+            ? `${result.receipt.title}: ${result.message}`
+            : result.message,
+        href:
+          "receipt" in result && result.receipt
+            ? result.receipt.href
+            : result.kind === "navigation"
+              ? result.href
+              : undefined,
+      } satisfies HomeBriefingItem,
+    ];
+  });
+}
+

@@ -1,15 +1,15 @@
-import { parseCommandInput } from "@/lib/life-os/commands";
+﻿import { parseCommandInput } from "@/lib/life-os/commands";
 
 describe("command parsing", () => {
   it.each([
-    ["add task finish OS lab write-up", "add_task"],
-    ["add event advisor check-in", "add_event"],
-    ["add material interview notes", "add_material"],
-    ["create workspace spanish writing sprint", "create_workspace"],
-    ["what should i do today", "what_should_i_do_today"],
-    ["build study flow", "build_study_flow"],
-    ["show at-risk workspaces", "show_at_risk_workspaces"],
-    ["rebalance week", "rebalance_week"],
+    ["build dashboard", "build_dashboard"],
+    ["suggest widgets", "suggest_widgets"],
+    ["rebalance schedule", "rebalance_schedule"],
+    ["focus workspace CS 3345", "focus_workspace"],
+    ["create project orbit launch site", "create_project"],
+    ["create study session OS quiz review", "create_study_session"],
+    ["generate weekly plan", "generate_weekly_plan"],
+    ["explain priority", "explain_priority"],
     ["show urgent items", "show_urgent_items"],
   ])("parses %s into %s", (input, intent) => {
     const result = parseCommandInput(input);
@@ -22,7 +22,7 @@ describe("command parsing", () => {
 
     expect(result.kind).toBe("navigation");
     if (result.kind === "navigation") {
-      expect(result.href).toBe("/tasks?priority=high");
+      expect(result.href).toBe("/assignments?scope=overdue");
     }
   });
 

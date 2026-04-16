@@ -1,5 +1,5 @@
-import { DashboardView } from "@/components/life-os/dashboard-view";
+import { redirect } from "next/navigation";
 
-export default function DashboardPage() {
-  return <DashboardView />;
+export default function IndexPage() {
+  redirect("/home");
 }

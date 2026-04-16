@@ -1,18 +1,12 @@
-export const WORKSPACE_KINDS = [
-  "course",
-  "study_track",
-  "personal",
-  "work",
-  "admin",
-] as const;
+export const WORKSPACE_KINDS = ["course", "project"] as const;
 
 export const TASK_KINDS = [
   "assignment",
   "study_session",
+  "project_task",
   "admin",
   "bill",
   "errand",
-  "work_task",
 ] as const;
 
 export const TASK_STATUSES = [
@@ -24,19 +18,13 @@ export const TASK_STATUSES = [
   "snoozed",
 ] as const;
 
-export const TASK_PRIORITIES = [
-  "low",
-  "medium",
-  "high",
-  "critical",
-] as const;
-
+export const TASK_PRIORITIES = ["low", "medium", "high", "critical"] as const;
 export const ENERGY_LEVELS = ["low", "medium", "high"] as const;
 
 export const EVENT_KINDS = [
   "class",
   "office_hours",
-  "appointment",
+  "meeting",
   "review",
   "exam",
   "session",
@@ -52,6 +40,22 @@ export const MATERIAL_KINDS = [
   "image",
 ] as const;
 
+export const DASHBOARD_WIDGET_KINDS = [
+  "primary_recommendation",
+  "assistant_summary",
+  "timeline",
+  "school_overview",
+  "active_projects",
+  "urgent_deadlines",
+  "quick_actions",
+] as const;
+
+export const PROJECT_MILESTONE_STATUSES = [
+  "planned",
+  "in_progress",
+  "complete",
+] as const;
+
 export type WorkspaceKind = (typeof WORKSPACE_KINDS)[number];
 export type TaskKind = (typeof TASK_KINDS)[number];
 export type TaskStatus = (typeof TASK_STATUSES)[number];
@@ -59,6 +63,8 @@ export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 export type EnergyLevel = (typeof ENERGY_LEVELS)[number];
 export type EventKind = (typeof EVENT_KINDS)[number];
 export type MaterialKind = (typeof MATERIAL_KINDS)[number];
+export type DashboardWidgetKind = (typeof DASHBOARD_WIDGET_KINDS)[number];
+export type ProjectMilestoneStatus = (typeof PROJECT_MILESTONE_STATUSES)[number];
 
 export type Workspace = {
   id: string;
@@ -69,14 +75,18 @@ export type Workspace = {
   icon: string;
   ownerLabel: string;
   progressSummary: string;
+  active: boolean;
   creditHours?: number;
   currentGrade?: number;
   targetGrade?: number;
+  semesterLabel?: string;
+  projectHealth?: "green" | "watch" | "risk";
 };
 
 export type Task = {
   id: string;
-  workspaceId: string;
+  primaryWorkspaceId?: string;
+  linkedWorkspaceIds: string[];
   kind: TaskKind;
   title: string;
   notes?: string;
@@ -96,7 +106,7 @@ export type Task = {
 
 export type Event = {
   id: string;
-  workspaceId: string;
+  workspaceId?: string;
   kind: EventKind;
   title: string;
   notes?: string;
@@ -116,6 +126,29 @@ export type StudyMaterial = {
   summary: string;
   addedAt: string;
   relatedTaskIds?: string[];
+};
+
+export type ProjectMilestone = {
+  id: string;
+  workspaceId: string;
+  title: string;
+  summary: string;
+  dueAt?: string;
+  status: ProjectMilestoneStatus;
+  progressPercent: number;
+  linkedTaskIds?: string[];
+};
+
+export type DashboardWidget = {
+  id: string;
+  kind: DashboardWidgetKind;
+  title: string;
+  description: string;
+  href: string;
+  order: number;
+  workspaceId?: string;
+  accent: "violet" | "sky" | "amber" | "emerald" | "rose";
+  layout: "hero" | "wide" | "compact";
 };
 
 export type GradeCategory = {
@@ -145,17 +178,6 @@ export type Gradebook = {
   items: GradeItem[];
 };
 
-export type ProgressRecord = {
-  id: string;
-  workspaceId: string;
-  label: string;
-  currentValue: number;
-  targetValue: number;
-  unit: string;
-  confidence: "low" | "medium" | "high";
-  dueAt?: string;
-};
-
 export type ConstraintProfile = {
   weeklyHoursAvailable: number;
   weeklyBudgetAvailable: number;
@@ -169,7 +191,7 @@ export type StudyPlanStep = {
   title: string;
   reason: string;
   minutes: number;
-  workspaceId: string;
+  workspaceId?: string;
 };
 
 export type StudyPlan = {
@@ -179,11 +201,12 @@ export type StudyPlan = {
 };
 
 export type TaskView = Task & {
-  workspace: Workspace;
+  workspace?: Workspace;
+  linkedWorkspaces: Workspace[];
 };
 
 export type EventView = Event & {
-  workspace: Workspace;
+  workspace?: Workspace;
 };
 
 export type TodayRecommendation = {
@@ -221,6 +244,8 @@ export type AgendaDayGroup = {
   isToday: boolean;
   pressureLabel: string;
   entries: AgendaEntry[];
+  openWindows: string[];
+  loadPercent: number;
 };
 
 export type WorkspaceRisk = {
@@ -247,9 +272,56 @@ export type ProgressCard = {
   neededOnNext?: number;
 };
 
+export type HomeWidgetData = {
+  widget: DashboardWidget;
+  headline: string;
+  detail: string;
+  stats: string[];
+  accentLabel: string;
+};
+
+export type GradeWhatIfCard = {
+  workspace: Workspace;
+  currentGrade: number;
+  targetGrade: number;
+  nextItemTitle?: string;
+  neededScore?: number;
+  categoryLabel?: string;
+};
+
+export type AssistantReceipt = {
+  title: string;
+  lines: string[];
+  href?: string;
+};
+
+export type AssistantResultCategory =
+  | "Action"
+  | "Plan"
+  | "Dashboard Update"
+  | "Priority Explanation"
+  | "Navigation";
+
+export type AssistantResultCard = {
+  id: string;
+  category: AssistantResultCategory;
+  title: string;
+  summary: string;
+  lines: string[];
+  href?: string;
+  accent: "sky" | "violet" | "amber" | "emerald" | "rose";
+};
+
+export type HomeBriefingItem = {
+  id: string;
+  label: string;
+  summary: string;
+  href?: string;
+};
+
 export type TaskScope = "all" | "today" | "overdue" | "upcoming";
 
-export type TaskFilterState = {
+export type AssignmentFilterState = {
   query: string;
   workspaceId: string | "all";
   kind: TaskKind | "all";
@@ -260,7 +332,8 @@ export type TaskFilterState = {
 
 export type AddTaskInput = {
   title: string;
-  workspaceId?: string;
+  primaryWorkspaceId?: string;
+  linkedWorkspaceIds?: string[];
   kind?: TaskKind;
   notes?: string;
   priority?: TaskPriority;
@@ -290,15 +363,25 @@ export type CreateWorkspaceInput = {
   kind?: WorkspaceKind;
 };
 
+export type CreateProjectMilestoneInput = {
+  workspaceId: string;
+  title: string;
+  summary: string;
+};
+
 export type CommandIntent =
   | "add_task"
   | "add_event"
   | "add_material"
-  | "create_workspace"
+  | "build_dashboard"
+  | "suggest_widgets"
+  | "rebalance_schedule"
+  | "focus_workspace"
+  | "create_project"
+  | "create_study_session"
+  | "generate_weekly_plan"
+  | "explain_priority"
   | "what_should_i_do_today"
-  | "build_study_flow"
-  | "show_at_risk_workspaces"
-  | "rebalance_week"
   | "show_urgent_items";
 
 export type CommandResult =
@@ -306,6 +389,7 @@ export type CommandResult =
       intent: CommandIntent;
       kind: "mutation";
       message: string;
+      receipt: AssistantReceipt;
       taskId?: string;
       workspaceId?: string;
       materialId?: string;
@@ -316,18 +400,34 @@ export type CommandResult =
       kind: "navigation";
       message: string;
       href: string;
+      receipt?: AssistantReceipt;
     }
   | {
       intent: CommandIntent;
       kind: "recommendation";
       message: string;
       recommendation?: TodayRecommendation;
+      receipt: AssistantReceipt;
     }
   | {
       intent: CommandIntent;
       kind: "plan";
       message: string;
       plan: StudyPlan;
+      receipt: AssistantReceipt;
+    }
+  | {
+      intent: CommandIntent;
+      kind: "dashboard";
+      message: string;
+      widgets: DashboardWidget[];
+      receipt: AssistantReceipt;
+    }
+  | {
+      intent: CommandIntent;
+      kind: "explanation";
+      message: string;
+      receipt: AssistantReceipt;
     }
   | {
       kind: "message";
@@ -339,26 +439,24 @@ export type LifeOsSnapshot = {
   tasks: Task[];
   events: Event[];
   materials: StudyMaterial[];
+  milestones: ProjectMilestone[];
+  widgets: DashboardWidget[];
   gradebooks: Gradebook[];
-  progressRecords: ProgressRecord[];
   constraintProfile: ConstraintProfile;
 };
 
 export const WORKSPACE_KIND_LABELS: Record<WorkspaceKind, string> = {
   course: "Course",
-  study_track: "Study Track",
-  personal: "Personal",
-  work: "Work",
-  admin: "Admin",
+  project: "Project",
 };
 
 export const TASK_KIND_LABELS: Record<TaskKind, string> = {
   assignment: "Assignment",
-  study_session: "Study",
+  study_session: "Study session",
+  project_task: "Project task",
   admin: "Admin",
   bill: "Bill",
   errand: "Errand",
-  work_task: "Work",
 };
 
 export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {

@@ -1,23 +1,34 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CalendarRange, Layers3, Plus, Sparkles } from "lucide-react";
+import { CalendarRange, LayoutGrid, Plus, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getAssistantResultCards } from "@/lib/life-os/selectors";
 import { useLifeOs } from "@/lib/life-os/state";
+import { cn } from "@/lib/utils";
 
 const SUGGESTED_COMMANDS = [
-  "add task finish OS lab write-up",
-  "add event advisor check-in",
-  "add material interview notes",
-  "create workspace spanish writing sprint",
+  "build dashboard",
   "what should i do today",
-  "build study flow",
-  "show at-risk workspaces",
-  "rebalance week",
+  "generate weekly plan",
+  "rebalance schedule",
+  "focus workspace CS 3345",
+  "create project orbit launch site",
+  "create study session OS quiz review",
+  "explain priority",
 ];
+
+const ACCENT_STYLES = {
+  sky: "bg-sky-400/14 text-sky-100 ring-1 ring-sky-300/18",
+  violet: "bg-violet-400/14 text-violet-100 ring-1 ring-violet-300/18",
+  amber: "bg-amber-400/14 text-amber-100 ring-1 ring-amber-300/18",
+  emerald: "bg-emerald-400/14 text-emerald-100 ring-1 ring-emerald-300/18",
+  rose: "bg-rose-400/14 text-rose-100 ring-1 ring-rose-300/18",
+} as const;
 
 export function CommandConsole({
   embedded = false,
@@ -27,145 +38,116 @@ export function CommandConsole({
   onComplete?: () => void;
 }) {
   const router = useRouter();
-  const {
-    clearCommandResult,
-    lastCommandResult,
-    runCommand,
-  } = useLifeOs();
+  const { clearCommandResult, lastCommandResult, runCommand } = useLifeOs();
   const [input, setInput] = useState("");
+  const quickResults = getAssistantResultCards(lastCommandResult ? [lastCommandResult] : []);
 
-  const handleSubmit = (commandText: string) => {
-    const result = runCommand(commandText);
-
-    if (result.kind === "navigation") {
-      router.push(result.href);
-      onComplete?.();
-      setInput("");
+  const executeCommand = (commandText: string) => {
+    const trimmed = commandText.trim();
+    if (!trimmed) {
       return;
     }
 
-    if (result.kind === "mutation") {
-      setInput("");
+    const result = runCommand(trimmed);
+    setInput("");
+
+    if (result.kind === "navigation") {
+      router.push(result.href);
     }
+
+    onComplete?.();
   };
 
   return (
-    <div className={`space-y-5 ${embedded ? "" : "rounded-2xl border hairline bg-[var(--surface-soft)] p-4"}`}>
+    <div
+      className={cn(
+        "space-y-3",
+        embedded ? "" : "rounded-2xl border hairline bg-[var(--surface-soft)]/72 p-3",
+      )}
+    >
       <form
-        className="space-y-3"
+        className="space-y-2.5"
         onSubmit={(event) => {
           event.preventDefault();
-          handleSubmit(input);
+          executeCommand(input);
         }}
       >
-        <Input
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          placeholder="Try: build study flow"
-          className="h-11 rounded-xl bg-card/80 text-foreground"
-        />
-        <div className="flex flex-wrap gap-2">
-          {SUGGESTED_COMMANDS.map((command) => (
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Input
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            placeholder="Run a quick Orbit action"
+            className="h-10 rounded-xl border-white/10 bg-background/70 text-[13px] text-foreground"
+          />
+          <div className="flex items-center gap-2">
+            {lastCommandResult ? (
+              <Button type="button" variant="outline" size="sm" onClick={clearCommandResult}>
+                Clear
+              </Button>
+            ) : null}
+            <Button type="submit" size="sm" className="min-w-[124px]">
+              <Sparkles className="size-4" />
+              Run command
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          {SUGGESTED_COMMANDS.slice(0, 5).map((command) => (
             <Button
               key={command}
               type="button"
               variant="outline"
               size="sm"
-              className="rounded-full"
-              onClick={() => {
-                setInput(command);
-                handleSubmit(command);
-              }}
+              className="h-7 rounded-full px-2.5 text-[11px]"
+              onClick={() => executeCommand(command)}
             >
               {command}
             </Button>
           ))}
         </div>
-        <div className="flex items-center justify-end gap-2">
-          {lastCommandResult ? (
-            <Button type="button" variant="outline" onClick={clearCommandResult}>
-              Clear
-            </Button>
-          ) : null}
-          <Button type="submit">
-            <Sparkles className="size-4" />
-            Run command
-          </Button>
-        </div>
       </form>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border hairline bg-card/80 p-4">
-          <Plus className="size-4 text-primary" />
-          <p className="mt-2 text-[13px] font-medium text-foreground">Quick capture</p>
-          <p className="mt-1 text-[12px] text-muted-foreground">
-            Add tasks, events, materials, or whole new workspaces in one line.
-          </p>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <div className="rounded-xl border hairline bg-background/55 p-3">
+          <Plus className="size-3.5 text-primary" />
+          <p className="mt-2 text-[12px] font-medium text-foreground">Quick capture</p>
+          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">Create tasks, sessions, or projects without leaving the current surface.</p>
         </div>
-        <div className="rounded-xl border hairline bg-card/80 p-4">
-          <Sparkles className="size-4 text-primary" />
-          <p className="mt-2 text-[13px] font-medium text-foreground">Ask for the next move</p>
-          <p className="mt-1 text-[12px] text-muted-foreground">
-            Pull today&apos;s recommendation or a full study flow without leaving the screen.
-          </p>
+        <div className="rounded-xl border hairline bg-background/55 p-3">
+          <LayoutGrid className="size-3.5 text-primary" />
+          <p className="mt-2 text-[12px] font-medium text-foreground">Widget update</p>
+          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">Rebuild Home or suggest a tighter dashboard mix from one command.</p>
         </div>
-        <div className="rounded-xl border hairline bg-card/80 p-4">
-          <CalendarRange className="size-4 text-primary" />
-          <p className="mt-2 text-[13px] font-medium text-foreground">Rebalance the week</p>
-          <p className="mt-1 text-[12px] text-muted-foreground">
-            Jump straight to agenda or workspace triage when the week starts to widen.
-          </p>
+        <div className="rounded-xl border hairline bg-background/55 p-3">
+          <CalendarRange className="size-3.5 text-primary" />
+          <p className="mt-2 text-[12px] font-medium text-foreground">Schedule move</p>
+          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">Jump straight to the calendar when the week needs rebalancing.</p>
         </div>
       </div>
 
-      {lastCommandResult ? (
-        <div className="rounded-xl border hairline bg-card/80 p-4">
-          <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-            Result
-          </p>
-          <p className="mt-2 text-[13px] font-medium text-foreground">
-            {lastCommandResult.message}
-          </p>
-          {lastCommandResult.kind === "recommendation" && lastCommandResult.recommendation ? (
-            <div className="mt-3 rounded-lg bg-[var(--surface-soft)] p-3">
-              <p className="text-[13px] font-medium text-foreground">
-                {lastCommandResult.recommendation.item.title}
-              </p>
-              <p className="mt-1 text-[12px] text-muted-foreground">
-                {lastCommandResult.recommendation.explanation}
-              </p>
+      {quickResults[0] ? (
+        <div className="rounded-xl border hairline bg-background/70 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <span className={cn("inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em]", ACCENT_STYLES[quickResults[0].accent])}>
+                {quickResults[0].category}
+              </span>
+              <p className="mt-2 text-[13px] font-medium text-foreground">{quickResults[0].title}</p>
+              <p className="mt-1 text-[12px] leading-5 text-muted-foreground">{quickResults[0].summary}</p>
             </div>
-          ) : null}
-          {lastCommandResult.kind === "plan" ? (
-            <div className="mt-3 space-y-2">
-              <div className="rounded-lg bg-[var(--surface-soft)] p-3">
-                <p className="text-[13px] font-medium text-foreground">
-                  {lastCommandResult.plan.title}
-                </p>
-                <p className="mt-1 text-[12px] text-muted-foreground">
-                  {lastCommandResult.plan.summary}
-                </p>
-              </div>
-              {lastCommandResult.plan.steps.map((step) => (
-                <div key={step.id} className="rounded-lg bg-[var(--surface-soft)] p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-[13px] font-medium text-foreground">{step.title}</p>
-                      <p className="mt-1 text-[12px] text-muted-foreground">{step.reason}</p>
-                    </div>
-                    <span className="rounded-md border hairline bg-card px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
-                      {step.minutes} min
-                    </span>
-                  </div>
-                </div>
+          </div>
+          {quickResults[0].lines.length ? (
+            <div className="mt-3 space-y-1.5 text-[11px] text-muted-foreground">
+              {quickResults[0].lines.slice(0, 3).map((line) => (
+                <p key={line}>{line}</p>
               ))}
             </div>
           ) : null}
-          {lastCommandResult.kind === "mutation" ? (
-            <div className="mt-3 inline-flex items-center gap-1.5 rounded-md border hairline bg-[var(--surface-soft)] px-2.5 py-1 text-[11px] text-muted-foreground">
-              <Layers3 className="size-3.5" />
-              The shared workspace model updated locally.
-            </div>
+          {quickResults[0].href ? (
+            <Link href={quickResults[0].href} className="mt-3 inline-flex text-[11px] font-medium text-primary underline-offset-4 hover:underline">
+              Open linked surface
+            </Link>
           ) : null}
         </div>
       ) : null}
