@@ -1,7 +1,8 @@
 "use client";
 
-import { MapPin, Sparkles, Wallet } from "lucide-react";
+import { MapPin, Play, Sparkles, Wallet } from "lucide-react";
 
+import { ItemPillBadges } from "@/components/life-os/item-pill-badges";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,21 +14,30 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { formatAmount, formatEstimatedMinutes, formatItemDateTime } from "@/lib/life-os/formatters";
-import type { LifeItem } from "@/lib/life-os/types";
-import { ItemPillBadges } from "@/components/life-os/item-pill-badges";
+import {
+  formatAmount,
+  formatEstimatedMinutes,
+  formatItemDateTime,
+} from "@/lib/life-os/formatters";
+import type { TaskView } from "@/lib/life-os/types";
 
 export function LifeItemDialog({
   item,
-  onToggleComplete,
+  onCompleteTask,
+  onMoveTaskToTomorrow,
+  onStartTask,
   onToggleFocus,
   isFocused,
 }: {
-  item: LifeItem;
-  onToggleComplete: () => void;
+  item: TaskView;
+  onCompleteTask: () => void;
+  onMoveTaskToTomorrow: () => void;
+  onStartTask: () => void;
   onToggleFocus: () => void;
   isFocused: boolean;
 }) {
+  const isComplete = item.status === "done" || item.status === "paid";
+
   return (
     <Dialog>
       <DialogTrigger
@@ -40,12 +50,22 @@ export function LifeItemDialog({
       <DialogContent className="max-w-lg gap-5">
         <DialogHeader>
           <DialogTitle className="font-heading text-2xl">{item.title}</DialogTitle>
-          <DialogDescription>{item.notes ?? "A steady next step with enough context to move."}</DialogDescription>
+          <DialogDescription>
+            {item.notes ?? "A grounded next step with enough context to move cleanly."}
+          </DialogDescription>
         </DialogHeader>
 
         <ItemPillBadges item={item} />
 
         <div className="grid gap-4 rounded-2xl bg-[var(--surface-soft)] p-4 sm:grid-cols-2">
+          <div className="space-y-1">
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              Workspace
+            </p>
+            <p className="text-sm text-foreground">
+              {item.workspace.name} · {item.workspace.ownerLabel}
+            </p>
+          </div>
           <div className="space-y-1">
             <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
               Timing
@@ -105,12 +125,19 @@ export function LifeItemDialog({
         <Separator />
 
         <DialogFooter>
+          <Button variant="outline" onClick={onStartTask} disabled={isComplete}>
+            <Play className="size-4" />
+            Start now
+          </Button>
+          <Button variant="outline" onClick={onMoveTaskToTomorrow}>
+            Move to tomorrow
+          </Button>
           <Button variant="outline" onClick={onToggleFocus}>
             <Sparkles className="size-4" />
-            {isFocused ? "Remove focus" : "Mark focus today"}
+            {isFocused ? "Remove focus" : "Mark focus"}
           </Button>
-          <Button onClick={onToggleComplete}>
-            {item.type === "bill" ? "Toggle paid state" : "Toggle complete"}
+          <Button onClick={onCompleteTask} disabled={isComplete}>
+            {item.kind === "bill" ? "Mark paid" : "Mark done"}
           </Button>
         </DialogFooter>
       </DialogContent>

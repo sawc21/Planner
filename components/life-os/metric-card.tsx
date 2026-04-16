@@ -20,10 +20,10 @@ export function MetricCard({
           <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
             {label}
           </p>
-          <p className="text-2xl font-semibold tracking-tight text-foreground">
+          <p className="text-2xl font-semibold tracking-tight text-foreground/95">
             {value}
           </p>
-          <p className="text-sm text-muted-foreground">{detail}</p>
+          <p className="text-sm text-foreground/72">{detail}</p>
         </div>
         <span className="rounded-2xl bg-[var(--surface-soft)] p-2 text-primary">
           <Icon className="size-4" />

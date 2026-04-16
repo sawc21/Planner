@@ -1,13 +1,14 @@
 import type { LucideIcon } from "lucide-react";
+import { Sparkles } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 
 export function EmptyState({
-  icon: Icon,
+  icon: Icon = Sparkles,
   title,
   description,
 }: {
-  icon: LucideIcon;
+  icon?: LucideIcon;
   title: string;
   description: string;
 }) {

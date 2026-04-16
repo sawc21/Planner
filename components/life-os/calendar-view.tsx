@@ -3,24 +3,34 @@
 import { CalendarX2, Clock3 } from "lucide-react";
 
 import { EmptyState } from "@/components/life-os/empty-state";
+import { EventCard } from "@/components/life-os/event-card";
 import { LifeItemCard } from "@/components/life-os/life-item-card";
 import { PageHeader } from "@/components/life-os/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatItemDay } from "@/lib/life-os/formatters";
-import { groupItemsByAgendaDay } from "@/lib/life-os/selectors";
+import { getAgendaGroups } from "@/lib/life-os/selectors";
 import { useLifeOs } from "@/lib/life-os/state";
 
 export function CalendarView() {
-  const { items, focusTodayIds, toggleFocusToday, toggleItemCompletion } = useLifeOs();
-  const agendaGroups = groupItemsByAgendaDay(items);
+  const {
+    workspaces,
+    tasks,
+    events,
+    focusTodayIds,
+    toggleFocusToday,
+    completeTask,
+    moveTaskToTomorrow,
+    startTask,
+  } = useLifeOs();
+  const agendaGroups = getAgendaGroups({ workspaces, tasks, events });
 
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Calendar"
-        title="Agenda-style, on purpose."
-        description="Just today plus the next seven days, grouped in a way that keeps the schedule legible and the MVP focused."
+        eyebrow="Agenda"
+        title="See the week with context."
+        description="Tasks and events stay together so class time, study blocks, bills, errands, and work all compete in the same honest timeline."
       />
 
       <div className="grid gap-4 xl:grid-cols-2">
@@ -30,27 +40,33 @@ export function CalendarView() {
               <div>
                 <CardTitle className="font-heading text-2xl">{group.label}</CardTitle>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {formatItemDay(group.date.toISOString())}
+                  {formatItemDay(group.date.toISOString())} · {group.pressureLabel}
                 </p>
               </div>
               <span className="rounded-full bg-[var(--surface-soft)] px-3 py-1 text-xs text-muted-foreground">
-                {group.items.length} scheduled
+                {group.entries.length} items
               </span>
             </CardHeader>
             <CardContent>
-              {group.items.length ? (
-                <ScrollArea className="max-h-[420px] pr-3">
+              {group.entries.length ? (
+                <ScrollArea className="max-h-[460px] pr-3">
                   <div className="space-y-3">
-                    {group.items.map((item) => (
-                      <LifeItemCard
-                        key={item.id}
-                        compact
-                        item={item}
-                        onToggleComplete={() => toggleItemCompletion(item.id)}
-                        onToggleFocus={() => toggleFocusToday(item.id)}
-                        isFocused={focusTodayIds.includes(item.id)}
-                      />
-                    ))}
+                    {group.entries.map((entry) =>
+                      entry.kind === "event" && entry.event ? (
+                        <EventCard key={entry.id} event={entry.event} compact />
+                      ) : entry.task ? (
+                        <LifeItemCard
+                          key={entry.id}
+                          compact
+                          item={entry.task}
+                          onCompleteTask={() => completeTask(entry.task!.id)}
+                          onMoveTaskToTomorrow={() => moveTaskToTomorrow(entry.task!.id)}
+                          onStartTask={() => startTask(entry.task!.id)}
+                          onToggleFocus={() => toggleFocusToday(entry.task!.id)}
+                          isFocused={focusTodayIds.includes(entry.task!.id)}
+                        />
+                      ) : null,
+                    )}
                   </div>
                 </ScrollArea>
               ) : (
@@ -59,8 +75,8 @@ export function CalendarView() {
                   title={group.isToday ? "A little white space today" : "Nothing scheduled here"}
                   description={
                     group.isToday
-                      ? "No appointments or scheduled reminders are sitting on today's agenda."
-                      : "This day is still open, which makes it a good candidate for rescheduling if the week gets noisy."
+                      ? "No tasks or events are currently pulling on today's schedule."
+                      : "This day is still open, which makes it a good candidate for rebalancing if the week tightens."
                   }
                 />
               )}

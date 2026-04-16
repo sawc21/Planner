@@ -17,25 +17,27 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  getOverdueItems,
-  getTodayItems,
-  getUpcomingDeadlines,
+  getOverdueTasks,
+  getTaskViews,
+  getTodayTasks,
+  getUpcomingTasks,
 } from "@/lib/life-os/selectors";
 import { useLifeOs } from "@/lib/life-os/state";
-import type { LifeItem, TaskFilterState, TaskShortcut } from "@/lib/life-os/types";
+import type { TaskFilterState, TaskScope, TaskView } from "@/lib/life-os/types";
 import {
-  LIFE_ITEM_PRIORITIES,
-  LIFE_ITEM_STATUSES,
-  LIFE_ITEM_TYPES,
-  PRIORITY_LABELS,
-  STATUS_LABELS,
-  TYPE_LABELS,
+  TASK_KIND_LABELS,
+  TASK_KINDS,
+  TASK_PRIORITY_LABELS,
+  TASK_PRIORITIES,
+  TASK_STATUSES,
+  TASK_STATUS_LABELS,
 } from "@/lib/life-os/types";
 
 function getInitialFilters(searchParams: URLSearchParams): TaskFilterState {
   return {
-    shortcut: (searchParams.get("scope") as TaskShortcut | null) ?? "all",
-    type: (searchParams.get("type") as TaskFilterState["type"] | null) ?? "all",
+    scope: (searchParams.get("scope") as TaskScope | null) ?? "all",
+    workspaceId: searchParams.get("workspaceId") ?? "all",
+    kind: (searchParams.get("kind") as TaskFilterState["kind"] | null) ?? "all",
     status: (searchParams.get("status") as TaskFilterState["status"] | null) ?? "all",
     priority:
       (searchParams.get("priority") as TaskFilterState["priority"] | null) ?? "all",
@@ -43,19 +45,27 @@ function getInitialFilters(searchParams: URLSearchParams): TaskFilterState {
   };
 }
 
-function applyShortcut(items: LifeItem[], shortcut: TaskShortcut) {
-  if (shortcut === "today") {
-    const ids = new Set(getTodayItems(items).map((item) => item.id));
+function applyScope(
+  items: TaskView[],
+  scopes: {
+    today: TaskView[];
+    overdue: TaskView[];
+    upcoming: TaskView[];
+  },
+  scope: TaskScope,
+) {
+  if (scope === "today") {
+    const ids = new Set(scopes.today.map((item) => item.id));
     return items.filter((item) => ids.has(item.id));
   }
 
-  if (shortcut === "overdue") {
-    const ids = new Set(getOverdueItems(items).map((item) => item.id));
+  if (scope === "overdue") {
+    const ids = new Set(scopes.overdue.map((item) => item.id));
     return items.filter((item) => ids.has(item.id));
   }
 
-  if (shortcut === "upcoming") {
-    const ids = new Set(getUpcomingDeadlines(items).map((item) => item.id));
+  if (scope === "upcoming") {
+    const ids = new Set(scopes.upcoming.map((item) => item.id));
     return items.filter((item) => ids.has(item.id));
   }
 
@@ -63,14 +73,32 @@ function applyShortcut(items: LifeItem[], shortcut: TaskShortcut) {
 }
 
 export function TasksView({ initialQueryString = "" }: { initialQueryString?: string }) {
-  const { items, focusTodayIds, toggleFocusToday, toggleItemCompletion } = useLifeOs();
+  const {
+    workspaces,
+    tasks,
+    focusTodayIds,
+    toggleFocusToday,
+    completeTask,
+    moveTaskToTomorrow,
+    startTask,
+  } = useLifeOs();
   const [filters, setFilters] = useState<TaskFilterState>(() =>
     getInitialFilters(new URLSearchParams(initialQueryString)),
   );
   const deferredQuery = useDeferredValue(filters.query);
+  const taskViews = getTaskViews({ tasks, workspaces });
+  const scopedTasks = {
+    today: getTodayTasks({ tasks, workspaces }),
+    overdue: getOverdueTasks({ tasks, workspaces }),
+    upcoming: getUpcomingTasks({ tasks, workspaces }),
+  };
 
-  const filteredItems = applyShortcut(items, filters.shortcut).filter((item) => {
-    if (filters.type !== "all" && item.type !== filters.type) {
+  const filteredItems = applyScope(taskViews, scopedTasks, filters.scope).filter((item) => {
+    if (filters.workspaceId !== "all" && item.workspaceId !== filters.workspaceId) {
+      return false;
+    }
+
+    if (filters.kind !== "all" && item.kind !== filters.kind) {
       return false;
     }
 
@@ -84,7 +112,7 @@ export function TasksView({ initialQueryString = "" }: { initialQueryString?: st
 
     if (deferredQuery) {
       const haystack =
-        `${item.title} ${item.notes ?? ""} ${item.category} ${item.tags.join(" ")}`.toLowerCase();
+        `${item.title} ${item.notes ?? ""} ${item.workspace.name} ${item.tags.join(" ")}`.toLowerCase();
       return haystack.includes(deferredQuery.toLowerCase());
     }
 
@@ -95,26 +123,26 @@ export function TasksView({ initialQueryString = "" }: { initialQueryString?: st
     <div className="space-y-6">
       <PageHeader
         eyebrow="Tasks"
-        title="One list, with enough shape to stay sane."
-        description="Filter by type, status, urgency, or time horizon without breaking the whole board into separate silos."
+        title="One task board, across every flow."
+        description="Assignments, study sessions, bills, errands, and work tasks stay in one system, but you can still filter hard by workspace, urgency, status, and type."
       />
 
       <div className="surface-panel rounded-[28px] border hairline p-4 sm:p-5">
         <div className="flex flex-col gap-4">
           <Tabs
-            value={filters.type}
+            value={filters.kind}
             onValueChange={(value) =>
               setFilters((current) => ({
                 ...current,
-                type: value as TaskFilterState["type"],
+                kind: value as TaskFilterState["kind"],
               }))
             }
           >
             <TabsList>
               <TabsTrigger value="all">All</TabsTrigger>
-              {LIFE_ITEM_TYPES.map((type) => (
-                <TabsTrigger key={type} value={type}>
-                  {TYPE_LABELS[type]}
+              {TASK_KINDS.map((kind) => (
+                <TabsTrigger key={kind} value={kind}>
+                  {TASK_KIND_LABELS[kind]}
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -128,12 +156,34 @@ export function TasksView({ initialQueryString = "" }: { initialQueryString?: st
                 onChange={(event) =>
                   setFilters((current) => ({ ...current, query: event.target.value }))
                 }
-                placeholder="Search titles, notes, categories, or tags"
+                placeholder="Search titles, notes, workspaces, or tags"
                 className="h-11 rounded-2xl bg-white/70 pl-10"
               />
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 xl:flex xl:items-center">
+            <div className="grid gap-3 sm:grid-cols-3 xl:flex xl:items-center">
+              <Select
+                value={filters.workspaceId}
+                onValueChange={(value) =>
+                  setFilters((current) => ({
+                    ...current,
+                    workspaceId: (value ?? "all") as TaskFilterState["workspaceId"],
+                  }))
+                }
+              >
+                <SelectTrigger className="w-full rounded-2xl bg-white/70 sm:w-[200px]">
+                  <SelectValue placeholder="All workspaces" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All workspaces</SelectItem>
+                  {workspaces.map((workspace) => (
+                    <SelectItem key={workspace.id} value={workspace.id}>
+                      {workspace.shortLabel} · {workspace.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
               <Select
                 value={filters.status}
                 onValueChange={(value) =>
@@ -148,9 +198,9 @@ export function TasksView({ initialQueryString = "" }: { initialQueryString?: st
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All statuses</SelectItem>
-                  {LIFE_ITEM_STATUSES.map((status) => (
+                  {TASK_STATUSES.map((status) => (
                     <SelectItem key={status} value={status}>
-                      {STATUS_LABELS[status]}
+                      {TASK_STATUS_LABELS[status]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -170,9 +220,9 @@ export function TasksView({ initialQueryString = "" }: { initialQueryString?: st
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All priorities</SelectItem>
-                  {LIFE_ITEM_PRIORITIES.map((priority) => (
+                  {TASK_PRIORITIES.map((priority) => (
                     <SelectItem key={priority} value={priority}>
-                      {PRIORITY_LABELS[priority]}
+                      {TASK_PRIORITY_LABELS[priority]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -183,19 +233,19 @@ export function TasksView({ initialQueryString = "" }: { initialQueryString?: st
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
               <SlidersHorizontal className="size-4" />
-              Shortcuts
+              Scopes
             </span>
-            {(["all", "today", "overdue", "upcoming"] as TaskShortcut[]).map((shortcut) => (
+            {(["all", "today", "overdue", "upcoming"] as TaskScope[]).map((scope) => (
               <FilterChip
-                key={shortcut}
-                active={filters.shortcut === shortcut}
-                onClick={() => setFilters((current) => ({ ...current, shortcut }))}
+                key={scope}
+                active={filters.scope === scope}
+                onClick={() => setFilters((current) => ({ ...current, scope }))}
               >
-                {shortcut === "all"
+                {scope === "all"
                   ? "Everything"
-                  : shortcut === "today"
+                  : scope === "today"
                     ? "Today"
-                    : shortcut === "overdue"
+                    : scope === "overdue"
                       ? "Overdue"
                       : "Upcoming"}
               </FilterChip>
@@ -206,7 +256,7 @@ export function TasksView({ initialQueryString = "" }: { initialQueryString?: st
 
       <div className="space-y-3">
         <p className="text-sm text-muted-foreground">
-          Showing <span className="font-medium text-foreground">{filteredItems.length}</span> items
+          Showing <span className="font-medium text-foreground">{filteredItems.length}</span> tasks
           that match the current view.
         </p>
 
@@ -216,7 +266,9 @@ export function TasksView({ initialQueryString = "" }: { initialQueryString?: st
               key={item.id}
               compact
               item={item}
-              onToggleComplete={() => toggleItemCompletion(item.id)}
+              onCompleteTask={() => completeTask(item.id)}
+              onMoveTaskToTomorrow={() => moveTaskToTomorrow(item.id)}
+              onStartTask={() => startTask(item.id)}
               onToggleFocus={() => toggleFocusToday(item.id)}
               isFocused={focusTodayIds.includes(item.id)}
             />
@@ -224,8 +276,8 @@ export function TasksView({ initialQueryString = "" }: { initialQueryString?: st
         ) : (
           <EmptyState
             icon={Search}
-            title="No items match that combination"
-            description="Try relaxing one filter or switch back to the full list to widen the board again."
+            title="No tasks match that combination"
+            description="Try relaxing one filter or switch back to the full board to widen the view again."
           />
         )}
       </div>

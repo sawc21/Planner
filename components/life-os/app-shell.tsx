@@ -2,18 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { format } from "date-fns";
+import { differenceInCalendarDays, endOfWeek, format, startOfWeek } from "date-fns";
 import {
-  AlarmClockCheck,
+  BookOpenCheck,
+  BriefcaseBusiness,
   CalendarDays,
-  CircleDollarSign,
   Command,
+  GraduationCap,
   LayoutDashboard,
   Menu,
+  Plus,
   Sparkles,
+  TrendingUp,
 } from "lucide-react";
 import { useState } from "react";
 
+import { CommandPanel } from "@/components/life-os/command-panel";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -25,19 +29,20 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import {
-  getOverdueItems,
-  getTodayItems,
+  getAtRiskWorkspaces,
+  getOverdueTasks,
   getTodayRecommendations,
 } from "@/lib/life-os/selectors";
 import { useLifeOs } from "@/lib/life-os/state";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/tasks", label: "Tasks", icon: AlarmClockCheck },
-  { href: "/calendar", label: "Calendar", icon: CalendarDays },
-  { href: "/deadlines", label: "Deadlines", icon: CircleDollarSign },
-  { href: "/command-center", label: "Command Center", icon: Command },
+  { href: "/", label: "Today", icon: LayoutDashboard },
+  { href: "/agenda", label: "Agenda", icon: CalendarDays },
+  { href: "/workspaces", label: "Workspaces", icon: GraduationCap },
+  { href: "/tasks", label: "Tasks", icon: BookOpenCheck },
+  { href: "/progress", label: "Progress", icon: TrendingUp },
+  { href: "/command", label: "Command", icon: Command },
 ];
 
 function SidebarLinks({
@@ -83,28 +88,84 @@ function SidebarLinks({
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const { items, focusTodayIds } = useLifeOs();
-  const overdueCount = getOverdueItems(items).length;
-  const todayCount = getTodayItems(items).length;
-  const recommendation = getTodayRecommendations(items).primary;
+  const {
+    workspaces,
+    tasks,
+    gradebooks,
+    progressRecords,
+    constraintProfile,
+    openCommandPanel,
+  } = useLifeOs();
+  const recommendation = getTodayRecommendations({
+    tasks,
+    workspaces,
+    constraintProfile,
+  }).primary;
+  const overdueTasks = getOverdueTasks({ tasks, workspaces }).length;
+  const atRiskWorkspaces = getAtRiskWorkspaces({
+    workspaces,
+    tasks,
+    gradebooks,
+    progressRecords,
+  });
+  const today = new Date();
+  const weekStart = startOfWeek(today, { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
+  const weekProgress = Math.round(
+    ((differenceInCalendarDays(today, weekStart) + 1) /
+      (differenceInCalendarDays(weekEnd, weekStart) + 1)) *
+      100,
+  );
 
   return (
     <div className="min-h-screen px-3 py-3 sm:px-4 sm:py-4">
       <div className="mx-auto flex max-w-[1560px] gap-4">
-        <aside className="surface-panel sticky top-4 hidden h-[calc(100vh-2rem)] w-[292px] shrink-0 rounded-[28px] border hairline lg:flex lg:flex-col">
+        <aside className="surface-panel sticky top-4 hidden h-[calc(100vh-2rem)] w-[300px] shrink-0 rounded-[28px] border hairline lg:flex lg:flex-col">
           <div className="space-y-5 p-5">
             <div className="space-y-2">
               <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground">
                 Life OS
               </p>
               <div>
-                <h2 className="font-heading text-3xl text-foreground">Plan gently.</h2>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  A calm cockpit for time-sensitive life admin, errands, and the week ahead.
+                <h2 className="font-heading text-3xl text-foreground/95">Plan, track, study.</h2>
+                <p className="mt-2 text-sm leading-6 text-foreground/72">
+                  One shared system for life admin, coursework, and structured learning flows.
                 </p>
               </div>
             </div>
-            <Separator />
+
+            <div className="rounded-[24px] bg-white/74 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                    Utility zone
+                  </p>
+                  <p className="mt-1 font-medium text-foreground">
+                    {format(today, "EEEE, MMM d")}
+                  </p>
+                  <p className="mt-1 text-sm text-foreground/72">
+                    {overdueTasks} overdue tasks still need relief, with {constraintProfile.hoursRemainingThisWeek} study hours and ${constraintProfile.budgetRemainingThisWeek} left this week.
+                  </p>
+                </div>
+                <Button size="icon-sm" onClick={openCommandPanel} aria-label="Quick add command">
+                  <Plus className="size-4" />
+                </Button>
+              </div>
+              <div className="mt-4 h-2 rounded-full bg-[var(--surface-soft)]">
+                <div
+                  className="h-2 rounded-full bg-primary transition-[width] duration-300"
+                  style={{ width: `${weekProgress}%` }}
+                />
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs text-foreground/72">
+                <span className="rounded-full bg-[var(--surface-soft)] px-3 py-1">
+                  {weekProgress}% through the week
+                </span>
+                <span className="rounded-full bg-[var(--surface-soft)] px-3 py-1">
+                  {overdueTasks} overdue
+                </span>
+              </div>
+            </div>
           </div>
 
           <ScrollArea className="flex-1 px-4 pb-4">
@@ -116,12 +177,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                 Daily anchor
               </p>
-              <p className="mt-2 font-medium text-foreground">
-                {recommendation?.item.title ?? "Let today stay spacious."}
+              <p className="mt-2 font-medium text-foreground/95">
+                {recommendation?.item.title ?? "Protect some white space."}
               </p>
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                {recommendation?.reason ??
-                  "You have enough margin to choose one meaningful thing."}
+              <p className="mt-1 text-sm leading-6 text-foreground/72">
+                {recommendation?.explanation ??
+                  "The board is calm enough to choose one meaningful next move."}
               </p>
             </div>
           </div>
@@ -144,7 +205,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <p className="text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">
                     {format(new Date(), "EEEE, MMMM d")}
                   </p>
-                  <p className="mt-1 text-sm text-foreground">
+                  <p className="mt-1 text-sm font-medium text-foreground/88">
                     {recommendation
                       ? `Lead with ${recommendation.item.title.toLowerCase()}.`
                       : "Your board looks calm today."}
@@ -153,13 +214,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="rounded-full bg-white/70 px-3 py-2 text-muted-foreground">
-                  {todayCount} active today
+                  {atRiskWorkspaces.length} at-risk workspaces
                 </span>
                 <span className="rounded-full bg-white/70 px-3 py-2 text-muted-foreground">
-                  {overdueCount} overdue
+                  {overdueTasks} overdue tasks
                 </span>
                 <span className="rounded-full bg-white/70 px-3 py-2 text-muted-foreground">
-                  {focusTodayIds.length} focus picks
+                  {constraintProfile.hoursRemainingThisWeek} hours left
+                </span>
+                <span className="rounded-full bg-white/70 px-3 py-2 text-muted-foreground">
+                  ${constraintProfile.budgetRemainingThisWeek} budget left
                 </span>
               </div>
             </div>
@@ -174,7 +238,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <SheetHeader className="space-y-2">
             <SheetTitle className="font-heading text-3xl">Life OS</SheetTitle>
             <SheetDescription>
-              Move through the week with less noise and a stronger sense of sequence.
+              A shared operating system for study flows, life admin, and the week ahead.
             </SheetDescription>
           </SheetHeader>
           <div className="px-4 pb-5">
@@ -184,21 +248,42 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                 Next best move
               </p>
-              <p className="mt-2 font-medium text-foreground">
+              <p className="mt-2 font-medium text-foreground/95">
                 {recommendation?.item.title ?? "Protect some white space."}
               </p>
               <Link
-                href="/command-center"
+                href="/command"
                 onClick={() => setMobileNavOpen(false)}
                 className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-4")}
               >
                 <Sparkles className="size-4" />
-                Open Command Center
+                Open Command
               </Link>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2 w-full"
+                onClick={() => {
+                  setMobileNavOpen(false);
+                  openCommandPanel();
+                }}
+              >
+                <Plus className="size-4" />
+                Quick add
+              </Button>
+              <div className="mt-4 rounded-2xl bg-[var(--surface-soft)] p-3">
+                <BriefcaseBusiness className="size-4 text-primary" />
+                <p className="mt-2 text-sm text-foreground/82">
+                  {atRiskWorkspaces[0]
+                    ? `${atRiskWorkspaces[0].workspace.shortLabel} is currently the most exposed workspace.`
+                    : "No workspace is clearly slipping right now."}
+                </p>
+              </div>
             </div>
           </div>
         </SheetContent>
       </Sheet>
+      <CommandPanel />
     </div>
   );
 }

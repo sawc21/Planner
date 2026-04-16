@@ -21,7 +21,8 @@ const fraunces = Fraunces({
 
 export const metadata: Metadata = {
   title: "Life OS",
-  description: "A calm planning cockpit for the week ahead.",
+  description:
+    "A shared operating system for study flows, coursework, life admin, and context-aware planning.",
 };
 
 export default function RootLayout({

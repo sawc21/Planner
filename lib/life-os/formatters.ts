@@ -6,8 +6,6 @@ import {
   parseISO,
 } from "date-fns";
 
-import type { LifeItem } from "@/lib/life-os/types";
-
 export function formatItemDateTime(dateValue?: string) {
   if (!dateValue) {
     return "No date";
@@ -64,7 +62,7 @@ export function formatAmount(amount?: number) {
   }).format(amount);
 }
 
-export function formatEstimatedMinutes(item: LifeItem) {
+export function formatEstimatedMinutes(item: { estimatedMinutes?: number }) {
   if (!item.estimatedMinutes) {
     return "Flexible";
   }

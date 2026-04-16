@@ -2,16 +2,12 @@
 
 import Link from "next/link";
 import { format } from "date-fns";
-import {
-  AlertCircle,
-  CalendarClock,
-  Flame,
-  Layers3,
-  ListChecks,
-  Sparkles,
-} from "lucide-react";
+import { AlertCircle, CalendarClock, Sparkles, TrendingUp } from "lucide-react";
 
+import { BuddyPanel } from "@/components/life-os/buddy-panel";
+import { ConstraintCard } from "@/components/life-os/constraint-card";
 import { EmptyState } from "@/components/life-os/empty-state";
+import { EventCard } from "@/components/life-os/event-card";
 import { LifeItemCard } from "@/components/life-os/life-item-card";
 import { MetricCard } from "@/components/life-os/metric-card";
 import { OverloadWarningCard } from "@/components/life-os/overload-warning-card";
@@ -20,58 +16,80 @@ import { RecommendationCard } from "@/components/life-os/recommendation-card";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  getOverdueItems,
+  buildDailyNarrative,
+  getAgendaGroups,
+  getAtRiskWorkspaces,
+  getBuddyInsight,
+  getConstraintAwarePlan,
   getOverloadAssessment,
-  getTodayItems,
   getTodayRecommendations,
-  getTopPriorityItems,
-  getUpcomingDeadlines,
+  getTodayTasks,
 } from "@/lib/life-os/selectors";
 import { useLifeOs } from "@/lib/life-os/state";
 import { cn } from "@/lib/utils";
 
-function WidgetFrame({
-  title,
-  description,
-  href,
-  children,
-}: {
-  title: string;
-  description: string;
-  href: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Card className="surface-card border hairline">
-      <CardHeader className="flex flex-row items-start justify-between gap-4">
-        <div>
-          <CardTitle className="font-heading text-2xl">{title}</CardTitle>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
-        </div>
-        <Link href={href} className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
-          Open
-        </Link>
-      </CardHeader>
-      <CardContent className="space-y-3">{children}</CardContent>
-    </Card>
-  );
-}
-
 export function DashboardView() {
-  const { items, focusTodayIds, toggleFocusToday, toggleItemCompletion } = useLifeOs();
-  const todayItems = getTodayItems(items);
-  const overdueItems = getOverdueItems(items);
-  const topPriorityItems = getTopPriorityItems(items, 4);
-  const upcomingDeadlines = getUpcomingDeadlines(items);
-  const recommendations = getTodayRecommendations(items);
-  const overload = getOverloadAssessment(items);
+  const {
+    workspaces,
+    tasks,
+    events,
+    gradebooks,
+    progressRecords,
+    constraintProfile,
+    focusTodayIds,
+    toggleFocusToday,
+    completeTask,
+    moveTaskToTomorrow,
+    startTask,
+  } = useLifeOs();
+
+  const recommendations = getTodayRecommendations({
+    workspaces,
+    tasks,
+    constraintProfile,
+  });
+  const overload = getOverloadAssessment({
+    workspaces,
+    tasks,
+    constraintProfile,
+  });
+  const atRisk = getAtRiskWorkspaces({
+    workspaces,
+    tasks,
+    gradebooks,
+    progressRecords,
+  });
+  const agenda = getAgendaGroups({ workspaces, tasks, events });
+  const todayGroup = agenda[0];
+  const todayTasks = getTodayTasks({ workspaces, tasks });
+  const buddyInsight = getBuddyInsight({
+    workspaces,
+    tasks,
+    constraintProfile,
+    gradebooks,
+    progressRecords,
+  });
+  const plan = getConstraintAwarePlan({
+    workspaces,
+    tasks,
+    constraintProfile,
+    gradebooks,
+    progressRecords,
+  });
+  const narrative = buildDailyNarrative({
+    workspaces,
+    tasks,
+    constraintProfile,
+    gradebooks,
+    progressRecords,
+  });
 
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Dashboard"
-        title="A steadier shape for the day."
-        description="See the whole board at a glance, then move toward the one action that makes the rest of the list easier to hold."
+        eyebrow="Today"
+        title="A shared operating system for the day."
+        description="Life admin, coursework, and self-directed study all live on one board, with context-aware planning deciding what should move first."
       />
 
       <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
@@ -82,155 +100,144 @@ export function DashboardView() {
                 {format(new Date(), "EEEE, MMMM d")}
               </p>
               <h2 className="font-heading text-4xl tracking-tight text-foreground">
-                What needs your calm attention first?
+                What deserves your calm attention first?
               </h2>
               <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-                Today blends time-sensitive admin, real appointments, and a few errands that can be
-                cleared without drama. Use the recommendation card to pick your opening move.
+                The board knows what class, study track, or life flow each item belongs to, so the
+                recommendation can weigh urgency, grade pressure, momentum, and constraints at the
+                same time.
               </p>
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
               <MetricCard
                 label="Today"
-                value={String(todayItems.length)}
-                detail="Items touching today's calendar"
-                icon={Layers3}
+                value={String(todayTasks.length)}
+                detail="Open tasks touching today"
+                icon={CalendarClock}
               />
               <MetricCard
-                label="Overdue"
-                value={String(overdueItems.length)}
-                detail="Loose ends asking for closure"
+                label="At risk"
+                value={String(atRisk.length)}
+                detail="Workspaces asking for attention"
                 icon={AlertCircle}
               />
               <MetricCard
                 label="Focus"
                 value={String(focusTodayIds.length)}
-                detail="Items you've marked to protect"
+                detail="Tasks you've marked to protect"
                 icon={Sparkles}
               />
+            </div>
+
+            <div className="rounded-[24px] bg-white/72 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                Narrative summary
+              </p>
+              <p className="mt-2 text-sm leading-7 text-foreground/82">{narrative}</p>
             </div>
           </CardContent>
         </Card>
 
-        <RecommendationCard recommendations={recommendations} />
+        <RecommendationCard
+          recommendations={recommendations}
+          onCompleteTask={completeTask}
+          onMoveTaskToTomorrow={moveTaskToTomorrow}
+          onStartTask={startTask}
+        />
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-2">
-        <WidgetFrame
-          title="Top priorities"
-          description="The highest-stakes items, ranked so you can see pressure before it gets noisy."
-          href="/tasks?priority=high"
-        >
-          {topPriorityItems.map((item) => (
-            <LifeItemCard
-              key={item.id}
-              compact
-              item={item}
-              onToggleComplete={() => toggleItemCompletion(item.id)}
-              onToggleFocus={() => toggleFocusToday(item.id)}
-              isFocused={focusTodayIds.includes(item.id)}
-            />
-          ))}
-        </WidgetFrame>
+      <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+        <div className="space-y-4">
+          <OverloadWarningCard assessment={overload} />
+          <ConstraintCard constraintProfile={constraintProfile} />
+          <BuddyPanel insight={buddyInsight} plan={plan} />
+        </div>
 
-        <WidgetFrame
-          title="Overdue items"
-          description="The oldest friction points still hanging over the board."
-          href="/deadlines?bucket=overdue"
-        >
-          {overdueItems.length ? (
-            overdueItems.slice(0, 3).map((item) => (
-              <LifeItemCard
-                key={item.id}
-                compact
-                item={item}
-                onToggleComplete={() => toggleItemCompletion(item.id)}
-                onToggleFocus={() => toggleFocusToday(item.id)}
-                isFocused={focusTodayIds.includes(item.id)}
-              />
-            ))
-          ) : (
-            <EmptyState
-              icon={Flame}
-              title="No overdue drift"
-              description="Nothing has tipped into the red. Keep the margin and let it stay that way."
-            />
-          )}
-        </WidgetFrame>
+        <div className="space-y-4">
+          <Card className="surface-card border hairline">
+            <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <div>
+                <CardTitle className="font-heading text-2xl">Today&apos;s schedule</CardTitle>
+                <p className="mt-2 text-sm leading-6 text-foreground/72">
+                  Events and due work grouped together so the study flow and the life flow stay in
+                  the same view.
+                </p>
+              </div>
+              <Link href="/agenda" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+                Open agenda
+              </Link>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {todayGroup?.entries.length ? (
+                todayGroup.entries.slice(0, 5).map((entry) =>
+                  entry.kind === "event" && entry.event ? (
+                    <EventCard key={entry.id} event={entry.event} compact />
+                  ) : entry.task ? (
+                    <LifeItemCard
+                      key={entry.id}
+                      compact
+                      item={entry.task}
+                      onCompleteTask={() => completeTask(entry.task!.id)}
+                      onMoveTaskToTomorrow={() => moveTaskToTomorrow(entry.task!.id)}
+                      onStartTask={() => startTask(entry.task!.id)}
+                      onToggleFocus={() => toggleFocusToday(entry.task!.id)}
+                      isFocused={focusTodayIds.includes(entry.task!.id)}
+                    />
+                  ) : null,
+                )
+              ) : (
+                <EmptyState
+                  icon={CalendarClock}
+                  title="Today still has breathing room"
+                  description="No tasks or events are currently tied to today."
+                />
+              )}
+            </CardContent>
+          </Card>
 
-        <WidgetFrame
-          title="Today's plan"
-          description="Everything currently pulling on today's attention, from appointments to admin."
-          href="/tasks?scope=today"
-        >
-          {todayItems.slice(0, 4).map((item) => (
-            <LifeItemCard
-              key={item.id}
-              compact
-              item={item}
-              onToggleComplete={() => toggleItemCompletion(item.id)}
-              onToggleFocus={() => toggleFocusToday(item.id)}
-              isFocused={focusTodayIds.includes(item.id)}
-            />
-          ))}
-        </WidgetFrame>
-
-        <WidgetFrame
-          title="Upcoming deadlines"
-          description="What comes into play next so later-this-week work never arrives as a surprise."
-          href="/deadlines?bucket=next3Days"
-        >
-          {upcomingDeadlines.map((item) => (
-            <LifeItemCard
-              key={item.id}
-              compact
-              item={item}
-              onToggleComplete={() => toggleItemCompletion(item.id)}
-              onToggleFocus={() => toggleFocusToday(item.id)}
-              isFocused={focusTodayIds.includes(item.id)}
-            />
-          ))}
-        </WidgetFrame>
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-[0.78fr_1.22fr]">
-        <OverloadWarningCard assessment={overload} />
-
-        <Card className="surface-card border hairline">
-          <CardHeader>
-            <CardTitle className="font-heading text-2xl">Quick links</CardTitle>
-            <p className="text-sm leading-6 text-muted-foreground">
-              Jump straight into the view that matches the kind of work you want to sort.
-            </p>
-          </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-3">
-            <Link
-              href="/tasks?status=todo"
-              className="rounded-[24px] bg-[var(--surface-soft)] p-4 transition-transform hover:-translate-y-0.5"
-            >
-              <ListChecks className="size-5 text-primary" />
-              <p className="mt-3 font-medium text-foreground">Clear the general list</p>
-              <p className="mt-1 text-sm text-muted-foreground">Filter to open tasks and bills.</p>
-            </Link>
-            <Link
-              href="/calendar"
-              className="rounded-[24px] bg-[var(--surface-soft)] p-4 transition-transform hover:-translate-y-0.5"
-            >
-              <CalendarClock className="size-5 text-primary" />
-              <p className="mt-3 font-medium text-foreground">See the next 7 days</p>
-              <p className="mt-1 text-sm text-muted-foreground">Agenda view for everything scheduled.</p>
-            </Link>
-            <Link
-              href="/command-center"
-              className="rounded-[24px] bg-[var(--surface-soft)] p-4 transition-transform hover:-translate-y-0.5"
-            >
-              <Sparkles className="size-5 text-primary" />
-              <p className="mt-3 font-medium text-foreground">Plan the day</p>
-              <p className="mt-1 text-sm text-muted-foreground">See the narrative and rebalance gently.</p>
-            </Link>
-          </CardContent>
-        </Card>
+          <Card className="surface-card border hairline">
+            <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <div>
+                <CardTitle className="font-heading text-2xl">At-risk workspaces</CardTitle>
+                <p className="mt-2 text-sm leading-6 text-foreground/72">
+                  The contexts most likely to slip next, whether they are classes, study tracks, or
+                  life admin.
+                </p>
+              </div>
+              <Link href="/workspaces?view=at-risk" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+                Open workspaces
+              </Link>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {atRisk.length ? (
+                atRisk.map((risk) => (
+                  <Link
+                    key={risk.workspace.id}
+                    href={`/workspaces/${risk.workspace.id}`}
+                    className="block rounded-2xl border hairline bg-white/80 p-4 transition-transform hover:-translate-y-0.5"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-foreground">{risk.workspace.name}</p>
+                        <p className="mt-1 text-sm text-foreground/72">{risk.reason}</p>
+                      </div>
+                      <span className="rounded-full bg-[var(--surface-soft)] px-3 py-1 text-xs text-muted-foreground">
+                        {risk.workspace.shortLabel}
+                      </span>
+                    </div>
+                  </Link>
+                ))
+              ) : (
+                <EmptyState
+                  icon={TrendingUp}
+                  title="No workspace is clearly slipping"
+                  description="The current mix of coursework, study tracks, and life admin still looks stable."
+                />
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </section>
     </div>
   );

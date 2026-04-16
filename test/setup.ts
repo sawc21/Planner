@@ -1,4 +1,6 @@
 import "@testing-library/jest-dom/vitest";
+import React from "react";
+import { vi } from "vitest";
 
 class ResizeObserverMock {
   observe() {}
@@ -16,3 +18,13 @@ Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
   writable: true,
   value: () => {},
 });
+
+vi.mock("@/components/ui/scroll-area", () => ({
+  ScrollArea: ({
+    children,
+    className,
+  }: {
+    children: React.ReactNode;
+    className?: string;
+  }) => React.createElement("div", { className }, children),
+}));

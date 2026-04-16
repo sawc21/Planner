@@ -1,20 +1,30 @@
 import { fireEvent, screen } from "@testing-library/react";
+import { vi } from "vitest";
 
 import { TasksView } from "@/components/life-os/tasks-view";
-import { renderWithLifeOs } from "@/test/test-utils";
+import { REFERENCE_DATE, renderWithLifeOs } from "@/test/test-utils";
 
 describe("TasksView", () => {
-  it("honors deep-linked filter combinations and local search", () => {
-    renderWithLifeOs(<TasksView initialQueryString="scope=overdue&type=bill" />);
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(REFERENCE_DATE);
+  });
 
-    expect(screen.getByText("Pay electric bill")).toBeInTheDocument();
-    expect(screen.queryByText("Therapy session")).not.toBeInTheDocument();
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("honors deep-linked filter combinations and local search", () => {
+    renderWithLifeOs(<TasksView initialQueryString="scope=overdue" />);
+
+    expect(screen.getByText("Schedule rent payment")).toBeInTheDocument();
+    expect(screen.queryByText("Grocery reset for the week")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText(/search titles/i), {
-      target: { value: "internet" },
+      target: { value: "insurance" },
     });
 
-    expect(screen.getByText("Pay internet bill")).toBeInTheDocument();
-    expect(screen.queryByText("Pay electric bill")).not.toBeInTheDocument();
+    expect(screen.getByText("Upload insurance claim receipts")).toBeInTheDocument();
+    expect(screen.queryByText("Schedule rent payment")).not.toBeInTheDocument();
   });
 });
