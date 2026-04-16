@@ -67,19 +67,19 @@ export function LifeItemCard({
   return (
     <Card
       className={cn(
-        "border hairline bg-card/90 transition-transform duration-150 hover:-translate-y-0.5",
+        "rounded-xl border hairline bg-card/90 transition-transform duration-150 hover:-translate-y-0.5",
         compact ? "shadow-none" : "surface-card",
         isFocused && "ring-2 ring-primary/20",
       )}
     >
-      <CardContent className={cn("space-y-4", compact ? "p-4" : "p-5")}>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-3">
-            <div className="space-y-2">
+      <CardContent className={cn("space-y-3.5", compact ? "p-3.5" : "p-4")}>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-2.5">
+            <div className="space-y-1.5">
               <p
                 className={cn(
-                  "text-lg font-semibold tracking-tight text-foreground/95",
-                  compact && "text-base",
+                  "text-[15px] font-semibold tracking-tight text-foreground",
+                  compact && "text-[14px]",
                   isComplete && "text-muted-foreground line-through",
                 )}
               >
@@ -89,13 +89,13 @@ export function LifeItemCard({
             </div>
 
             {item.notes ? (
-              <p className="max-w-2xl text-sm leading-6 text-foreground/72">
+              <p className="max-w-2xl text-[13px] leading-5 text-muted-foreground">
                 {item.notes}
               </p>
             ) : null}
 
-            <div className="flex flex-wrap items-center gap-3 text-sm text-foreground/72">
-              <span className="inline-flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-3 text-[12px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5 font-mono">
                 <Clock3 className="size-3.5" />
                 {formatItemDateTime(item.scheduledAt ?? item.dueAt)}
               </span>
@@ -106,18 +106,18 @@ export function LifeItemCard({
                 </span>
               ) : null}
               {item.amount != null ? (
-                <span className="inline-flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1.5 font-mono">
                   <Wallet className="size-3.5" />
                   {formatAmount(item.amount)}
                 </span>
               ) : null}
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5">
               {meta.map((entry) => (
                 <span
                   key={`${item.id}-${entry}`}
-                  className="rounded-full bg-[var(--surface-soft)] px-3 py-1 text-xs text-muted-foreground"
+                  className="rounded-md border hairline bg-[var(--surface-soft)] px-2 py-0.5 font-mono text-[11px] text-muted-foreground"
                 >
                   {entry}
                 </span>

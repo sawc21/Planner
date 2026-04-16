@@ -24,50 +24,74 @@ export function WorkspaceCard({
   risk?: WorkspaceRisk;
 }) {
   return (
-    <Card className="surface-card border hairline">
+    <Card className="surface-card rounded-xl border hairline">
       <CardHeader className="space-y-4">
         <div className="flex items-start justify-between gap-3">
-          <span className={`inline-flex items-center gap-2 rounded-2xl px-3 py-2 ${workspace.colorToken}`}>
+          <span
+            className={`inline-flex items-center gap-2 rounded-lg px-2.5 py-1.5 ${workspace.colorToken}`}
+          >
             <WorkspaceIcon icon={workspace.icon} className="size-4" />
-            <span className="text-xs font-medium uppercase tracking-[0.2em]">
+            <span className="font-mono text-[11px] font-medium uppercase tracking-[0.18em]">
               {workspace.shortLabel}
             </span>
           </span>
-          <span className="rounded-full bg-[var(--surface-soft)] px-3 py-1 text-xs text-muted-foreground">
+          <span className="rounded-md border hairline bg-[var(--surface-soft)] px-2 py-0.5 text-[11px] text-muted-foreground">
             {WORKSPACE_KIND_LABELS[workspace.kind]}
           </span>
         </div>
         <div>
-          <CardTitle className="font-heading text-2xl">{workspace.name}</CardTitle>
-          <p className="mt-2 text-sm leading-6 text-foreground/72">
+          <CardTitle className="text-xl font-semibold tracking-tight">
+            {workspace.name}
+          </CardTitle>
+          <p className="mt-1.5 text-[13px] leading-5 text-muted-foreground">
             {workspace.ownerLabel} · {workspace.progressSummary}
           </p>
+          {workspace.currentGrade != null ? (
+            <p className="mt-2 font-mono text-[12px] text-muted-foreground">
+              Grade:{" "}
+              <span className="text-foreground">
+                {workspace.currentGrade.toFixed(1)}
+              </span>
+              {workspace.targetGrade != null ? (
+                <> / {workspace.targetGrade.toFixed(1)} target</>
+              ) : null}
+            </p>
+          ) : null}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl bg-[var(--surface-soft)] p-3">
+        <div className="grid gap-2 sm:grid-cols-3">
+          <div className="rounded-lg border hairline bg-[var(--surface-soft)] p-3">
             <BookMarked className="size-4 text-primary" />
-            <p className="mt-2 text-sm font-medium text-foreground">{taskCount} open tasks</p>
+            <p className="mt-2 text-[13px] font-medium text-foreground">
+              <span className="font-mono">{taskCount}</span> open tasks
+            </p>
           </div>
-          <div className="rounded-2xl bg-[var(--surface-soft)] p-3">
+          <div className="rounded-lg border hairline bg-[var(--surface-soft)] p-3">
             <Clock3 className="size-4 text-primary" />
-            <p className="mt-2 text-sm font-medium text-foreground">{eventCount} scheduled events</p>
+            <p className="mt-2 text-[13px] font-medium text-foreground">
+              <span className="font-mono">{eventCount}</span> scheduled
+            </p>
           </div>
-          <div className="rounded-2xl bg-[var(--surface-soft)] p-3">
+          <div className="rounded-lg border hairline bg-[var(--surface-soft)] p-3">
             <Files className="size-4 text-primary" />
-            <p className="mt-2 text-sm font-medium text-foreground">{materialCount} materials</p>
+            <p className="mt-2 text-[13px] font-medium text-foreground">
+              <span className="font-mono">{materialCount}</span> materials
+            </p>
           </div>
         </div>
         {risk ? (
-          <div className="rounded-2xl bg-[var(--attention-soft)] p-4">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          <div className="rounded-lg border hairline bg-[var(--attention-soft)] p-3.5">
+            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
               Risk signal
             </p>
-            <p className="mt-2 text-sm text-foreground/82">{risk.reason}</p>
+            <p className="mt-1.5 text-[13px] text-foreground">{risk.reason}</p>
           </div>
         ) : null}
-        <Link href={href} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-fit")}>
+        <Link
+          href={href}
+          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-fit")}
+        >
           Open workspace
           <ArrowRight className="size-4" />
         </Link>

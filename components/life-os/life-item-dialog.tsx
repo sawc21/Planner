@@ -49,7 +49,7 @@ export function LifeItemDialog({
       </DialogTrigger>
       <DialogContent className="max-w-lg gap-5">
         <DialogHeader>
-          <DialogTitle className="font-heading text-2xl">{item.title}</DialogTitle>
+          <DialogTitle className="text-xl font-semibold tracking-tight">{item.title}</DialogTitle>
           <DialogDescription>
             {item.notes ?? "A grounded next step with enough context to move cleanly."}
           </DialogDescription>
@@ -57,37 +57,37 @@ export function LifeItemDialog({
 
         <ItemPillBadges item={item} />
 
-        <div className="grid gap-4 rounded-2xl bg-[var(--surface-soft)] p-4 sm:grid-cols-2">
+        <div className="grid gap-4 rounded-xl border hairline bg-[var(--surface-soft)] p-4 sm:grid-cols-2">
           <div className="space-y-1">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
               Workspace
             </p>
-            <p className="text-sm text-foreground">
+            <p className="text-[13px] text-foreground">
               {item.workspace.name} · {item.workspace.ownerLabel}
             </p>
           </div>
           <div className="space-y-1">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
               Timing
             </p>
-            <p className="text-sm text-foreground">
+            <p className="font-mono text-[13px] text-foreground">
               {formatItemDateTime(item.scheduledAt ?? item.dueAt)}
             </p>
           </div>
           <div className="space-y-1">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
               Energy + effort
             </p>
-            <p className="text-sm text-foreground">
-              {item.energy} energy · {formatEstimatedMinutes(item)}
+            <p className="text-[13px] text-foreground">
+              {item.energy} energy · <span className="font-mono">{formatEstimatedMinutes(item)}</span>
             </p>
           </div>
           {item.location ? (
             <div className="space-y-1">
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
                 Location
               </p>
-              <p className="flex items-center gap-2 text-sm text-foreground">
+              <p className="flex items-center gap-2 text-[13px] text-foreground">
                 <MapPin className="size-3.5 text-muted-foreground" />
                 {item.location}
               </p>
@@ -95,10 +95,10 @@ export function LifeItemDialog({
           ) : null}
           {item.amount != null ? (
             <div className="space-y-1">
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
                 Amount
               </p>
-              <p className="flex items-center gap-2 text-sm text-foreground">
+              <p className="flex items-center gap-2 font-mono text-[13px] text-foreground">
                 <Wallet className="size-3.5 text-muted-foreground" />
                 {formatAmount(item.amount)}
               </p>
@@ -107,14 +107,14 @@ export function LifeItemDialog({
         </div>
 
         <div className="space-y-2">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
             Tags
           </p>
           <div className="flex flex-wrap gap-2">
             {item.tags.map((tag) => (
               <span
                 key={tag}
-                className="rounded-full bg-[var(--surface-soft)] px-3 py-1 text-xs text-muted-foreground"
+                className="rounded-md border hairline bg-[var(--surface-soft)] px-2 py-0.5 font-mono text-[11px] text-muted-foreground"
               >
                 #{tag}
               </span>

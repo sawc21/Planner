@@ -50,7 +50,7 @@ export function CommandConsole({
   };
 
   return (
-    <div className={`space-y-5 ${embedded ? "" : "rounded-[28px] bg-[var(--surface-soft)] p-4"}`}>
+    <div className={`space-y-5 ${embedded ? "" : "rounded-2xl border hairline bg-[var(--surface-soft)] p-4"}`}>
       <form
         className="space-y-3"
         onSubmit={(event) => {
@@ -62,7 +62,7 @@ export function CommandConsole({
           value={input}
           onChange={(event) => setInput(event.target.value)}
           placeholder="Try: build study flow"
-          className="h-12 rounded-2xl bg-white/70 text-foreground"
+          className="h-11 rounded-xl bg-card/80 text-foreground"
         />
         <div className="flex flex-wrap gap-2">
           {SUGGESTED_COMMANDS.map((command) => (
@@ -95,61 +95,65 @@ export function CommandConsole({
       </form>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl bg-white/80 p-4">
+        <div className="rounded-xl border hairline bg-card/80 p-4">
           <Plus className="size-4 text-primary" />
-          <p className="mt-2 font-medium text-foreground">Quick capture</p>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-2 text-[13px] font-medium text-foreground">Quick capture</p>
+          <p className="mt-1 text-[12px] text-muted-foreground">
             Add tasks, events, materials, or whole new workspaces in one line.
           </p>
         </div>
-        <div className="rounded-2xl bg-white/80 p-4">
+        <div className="rounded-xl border hairline bg-card/80 p-4">
           <Sparkles className="size-4 text-primary" />
-          <p className="mt-2 font-medium text-foreground">Ask for the next move</p>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-2 text-[13px] font-medium text-foreground">Ask for the next move</p>
+          <p className="mt-1 text-[12px] text-muted-foreground">
             Pull today&apos;s recommendation or a full study flow without leaving the screen.
           </p>
         </div>
-        <div className="rounded-2xl bg-white/80 p-4">
+        <div className="rounded-xl border hairline bg-card/80 p-4">
           <CalendarRange className="size-4 text-primary" />
-          <p className="mt-2 font-medium text-foreground">Rebalance the week</p>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-2 text-[13px] font-medium text-foreground">Rebalance the week</p>
+          <p className="mt-1 text-[12px] text-muted-foreground">
             Jump straight to agenda or workspace triage when the week starts to widen.
           </p>
         </div>
       </div>
 
       {lastCommandResult ? (
-        <div className="rounded-[24px] border hairline bg-white/80 p-4">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+        <div className="rounded-xl border hairline bg-card/80 p-4">
+          <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
             Result
           </p>
-          <p className="mt-2 font-medium text-foreground">{lastCommandResult.message}</p>
+          <p className="mt-2 text-[13px] font-medium text-foreground">
+            {lastCommandResult.message}
+          </p>
           {lastCommandResult.kind === "recommendation" && lastCommandResult.recommendation ? (
-            <div className="mt-3 rounded-2xl bg-[var(--surface-soft)] p-3">
-              <p className="font-medium text-foreground">
+            <div className="mt-3 rounded-lg bg-[var(--surface-soft)] p-3">
+              <p className="text-[13px] font-medium text-foreground">
                 {lastCommandResult.recommendation.item.title}
               </p>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className="mt-1 text-[12px] text-muted-foreground">
                 {lastCommandResult.recommendation.explanation}
               </p>
             </div>
           ) : null}
           {lastCommandResult.kind === "plan" ? (
-            <div className="mt-3 space-y-3">
-              <div className="rounded-2xl bg-[var(--surface-soft)] p-3">
-                <p className="font-medium text-foreground">{lastCommandResult.plan.title}</p>
-                <p className="mt-1 text-sm text-muted-foreground">
+            <div className="mt-3 space-y-2">
+              <div className="rounded-lg bg-[var(--surface-soft)] p-3">
+                <p className="text-[13px] font-medium text-foreground">
+                  {lastCommandResult.plan.title}
+                </p>
+                <p className="mt-1 text-[12px] text-muted-foreground">
                   {lastCommandResult.plan.summary}
                 </p>
               </div>
               {lastCommandResult.plan.steps.map((step) => (
-                <div key={step.id} className="rounded-2xl bg-[var(--surface-soft)] p-3">
+                <div key={step.id} className="rounded-lg bg-[var(--surface-soft)] p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-medium text-foreground">{step.title}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">{step.reason}</p>
+                      <p className="text-[13px] font-medium text-foreground">{step.title}</p>
+                      <p className="mt-1 text-[12px] text-muted-foreground">{step.reason}</p>
                     </div>
-                    <span className="rounded-full bg-white/80 px-3 py-1 text-xs text-muted-foreground">
+                    <span className="rounded-md border hairline bg-card px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
                       {step.minutes} min
                     </span>
                   </div>
@@ -158,7 +162,7 @@ export function CommandConsole({
             </div>
           ) : null}
           {lastCommandResult.kind === "mutation" ? (
-            <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-[var(--surface-soft)] px-3 py-1 text-xs text-muted-foreground">
+            <div className="mt-3 inline-flex items-center gap-1.5 rounded-md border hairline bg-[var(--surface-soft)] px-2.5 py-1 text-[11px] text-muted-foreground">
               <Layers3 className="size-3.5" />
               The shared workspace model updated locally.
             </div>

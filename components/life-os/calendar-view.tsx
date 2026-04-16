@@ -35,15 +35,15 @@ export function CalendarView() {
 
       <div className="grid gap-4 xl:grid-cols-2">
         {agendaGroups.map((group) => (
-          <Card key={group.key} className="surface-card border hairline">
+          <Card key={group.key} className="surface-card rounded-xl border hairline">
             <CardHeader className="flex flex-row items-center justify-between gap-3">
               <div>
-                <CardTitle className="font-heading text-2xl">{group.label}</CardTitle>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {formatItemDay(group.date.toISOString())} · {group.pressureLabel}
+                <CardTitle className="text-xl font-semibold tracking-tight">{group.label}</CardTitle>
+                <p className="mt-1 text-[12px] text-muted-foreground">
+                  <span className="font-mono">{formatItemDay(group.date.toISOString())}</span> · {group.pressureLabel}
                 </p>
               </div>
-              <span className="rounded-full bg-[var(--surface-soft)] px-3 py-1 text-xs text-muted-foreground">
+              <span className="rounded-md border hairline bg-[var(--surface-soft)] px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
                 {group.entries.length} items
               </span>
             </CardHeader>

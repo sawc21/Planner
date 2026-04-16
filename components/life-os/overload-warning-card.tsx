@@ -16,25 +16,25 @@ export function OverloadWarningCard({
 
   return (
     <Card
-      className={`${styleBySeverity[assessment.severity]} shadow-none transition-colors duration-300 animate-in fade-in-0`}
+      className={`${styleBySeverity[assessment.severity]} rounded-xl shadow-none transition-colors duration-300 animate-in fade-in-0`}
     >
       <CardHeader className="flex flex-row items-start gap-3 space-y-0">
-        <span className="rounded-2xl bg-white/65 p-2 text-foreground">
+        <span className="rounded-md bg-card/70 p-2 text-foreground">
           <AlertTriangle className="size-4" />
         </span>
         <div className="space-y-1">
-          <CardTitle className="font-heading text-2xl">
+          <CardTitle className="text-xl font-semibold tracking-tight">
             {assessment.severity === "overloaded"
               ? "Gentle overload warning"
               : assessment.severity === "watch"
                 ? "Keep an eye on today's load"
                 : "Load looks workable"}
           </CardTitle>
-          <p className="text-sm leading-6 text-foreground/82">{assessment.reason}</p>
+          <p className="text-[13px] leading-5 text-foreground/82">{assessment.reason}</p>
         </div>
       </CardHeader>
       <CardContent>
-        <p className="text-sm leading-6 text-foreground/82">{assessment.suggestedAction}</p>
+        <p className="text-[13px] leading-5 text-foreground/82">{assessment.suggestedAction}</p>
       </CardContent>
     </Card>
   );

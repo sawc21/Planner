@@ -42,7 +42,7 @@ export function WorkspacesView({
         description="Courses, study tracks, personal admin, work, and life flows each get their own identity so the system knows where every task and material belongs."
       />
 
-      <div className="surface-panel rounded-[28px] border hairline p-4 sm:p-5">
+      <div className="surface-panel rounded-2xl border hairline p-4 sm:p-5">
         <div className="flex flex-wrap gap-2">
           <FilterChip active={activeKind === "all"} onClick={() => setActiveKind("all")}>
             All

@@ -90,11 +90,11 @@ export function CommandCenterView() {
       <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
         <div className="space-y-4">
           <CommandConsole embedded />
-          <div className="rounded-[28px] bg-[var(--surface-soft)] p-5">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          <div className="rounded-2xl border hairline bg-[var(--surface-soft)] p-5">
+            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
               Narrative summary
             </p>
-            <p className="mt-3 text-sm leading-7 text-foreground/82">{narrative}</p>
+            <p className="mt-3 text-[13px] leading-6 text-foreground/85">{narrative}</p>
           </div>
         </div>
         <div className="space-y-4">

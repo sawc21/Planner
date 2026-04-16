@@ -90,26 +90,32 @@ export function WorkspaceDetailView({ workspaceId }: { workspaceId: string }) {
       />
 
       <div className="grid gap-4 xl:grid-cols-3">
-        <Card className="surface-card border hairline xl:col-span-2">
-          <CardContent className="grid gap-4 p-5 md:grid-cols-3">
-            <div className="rounded-2xl bg-[var(--surface-soft)] p-4">
-              <ListTodo className="size-5 text-primary" />
-              <p className="mt-3 font-medium text-foreground">{bundle.tasks.length} linked tasks</p>
+        <Card className="surface-card rounded-xl border hairline xl:col-span-2">
+          <CardContent className="grid gap-3 p-5 md:grid-cols-3">
+            <div className="rounded-lg border hairline bg-[var(--surface-soft)] p-3.5">
+              <ListTodo className="size-4 text-primary" />
+              <p className="mt-2.5 text-[13px] font-medium text-foreground">
+                <span className="font-mono">{bundle.tasks.length}</span> linked tasks
+              </p>
             </div>
-            <div className="rounded-2xl bg-[var(--surface-soft)] p-4">
-              <GraduationCap className="size-5 text-primary" />
-              <p className="mt-3 font-medium text-foreground">{bundle.events.length} scheduled events</p>
+            <div className="rounded-lg border hairline bg-[var(--surface-soft)] p-3.5">
+              <GraduationCap className="size-4 text-primary" />
+              <p className="mt-2.5 text-[13px] font-medium text-foreground">
+                <span className="font-mono">{bundle.events.length}</span> scheduled events
+              </p>
             </div>
-            <div className="rounded-2xl bg-[var(--surface-soft)] p-4">
-              <Files className="size-5 text-primary" />
-              <p className="mt-3 font-medium text-foreground">{bundle.materials.length} materials</p>
+            <div className="rounded-lg border hairline bg-[var(--surface-soft)] p-3.5">
+              <Files className="size-4 text-primary" />
+              <p className="mt-2.5 text-[13px] font-medium text-foreground">
+                <span className="font-mono">{bundle.materials.length}</span> materials
+              </p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="surface-card border hairline">
+        <Card className="surface-card rounded-xl border hairline">
           <CardHeader>
-            <CardTitle className="font-heading text-2xl">Context snapshot</CardTitle>
+            <CardTitle className="text-xl font-semibold tracking-tight">Context snapshot</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-foreground/78">
             <p>{bundle.workspace.progressSummary}</p>
@@ -131,9 +137,9 @@ export function WorkspaceDetailView({ workspaceId }: { workspaceId: string }) {
         </TabsList>
 
         <TabsContent value="overview" className="grid gap-4 xl:grid-cols-2">
-          <Card className="surface-card border hairline">
+          <Card className="surface-card rounded-xl border hairline">
             <CardHeader>
-              <CardTitle className="font-heading text-2xl">Next tasks</CardTitle>
+              <CardTitle className="text-xl font-semibold tracking-tight">Next tasks</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {bundle.tasks.slice(0, 3).map((task) => (
@@ -151,9 +157,9 @@ export function WorkspaceDetailView({ workspaceId }: { workspaceId: string }) {
             </CardContent>
           </Card>
 
-          <Card className="surface-card border hairline">
+          <Card className="surface-card rounded-xl border hairline">
             <CardHeader>
-              <CardTitle className="font-heading text-2xl">Upcoming events</CardTitle>
+              <CardTitle className="text-xl font-semibold tracking-tight">Upcoming events</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {bundle.events.length ? (
@@ -189,9 +195,9 @@ export function WorkspaceDetailView({ workspaceId }: { workspaceId: string }) {
           <div className="grid gap-4 xl:grid-cols-2">
             {bundle.materials.length ? (
               bundle.materials.map((material) => (
-                <Card key={material.id} className="surface-card border hairline">
+                <Card key={material.id} className="surface-card rounded-xl border hairline">
                   <CardHeader>
-                    <CardTitle className="font-heading text-2xl">{material.title}</CardTitle>
+                    <CardTitle className="text-xl font-semibold tracking-tight">{material.title}</CardTitle>
                     <p className="text-sm leading-6 text-foreground/72">
                       {material.kind.replace("_", " ")} · {material.fileType}
                     </p>
@@ -212,24 +218,24 @@ export function WorkspaceDetailView({ workspaceId }: { workspaceId: string }) {
 
         <TabsContent value="progress" className="grid gap-4 xl:grid-cols-2">
           {bundle.gradebook ? (
-            <Card className="surface-card border hairline">
+            <Card className="surface-card rounded-xl border hairline">
               <CardHeader>
-                <CardTitle className="font-heading text-2xl">Gradebook</CardTitle>
-                <p className="text-sm leading-6 text-foreground/72">
-                  Current grade {bundle.gradebook.currentGrade}% against a target of {bundle.gradebook.targetGrade}%.
+                <CardTitle className="text-xl font-semibold tracking-tight">Gradebook</CardTitle>
+                <p className="text-[13px] leading-5 text-foreground/72">
+                  Current grade <span className="font-mono">{bundle.gradebook.currentGrade}%</span> against a target of <span className="font-mono">{bundle.gradebook.targetGrade}%</span>.
                 </p>
               </CardHeader>
               <CardContent className="space-y-3">
                 {bundle.gradebook.categories.map((category) => (
-                  <div key={category.id} className="rounded-2xl bg-[var(--surface-soft)] p-4">
+                  <div key={category.id} className="rounded-lg border hairline bg-[var(--surface-soft)] p-3.5">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="font-medium text-foreground">{category.label}</p>
-                      <span className="rounded-full bg-white/80 px-3 py-1 text-xs text-muted-foreground">
+                      <p className="text-[13px] font-medium text-foreground">{category.label}</p>
+                      <span className="rounded-md border hairline bg-card/80 px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
                         {category.weight}% weight
                       </span>
                     </div>
-                    <p className="mt-2 text-sm text-foreground/72">
-                      Current category score: {category.currentScore}%
+                    <p className="mt-2 text-[12px] text-foreground/72">
+                      Current category score: <span className="font-mono">{category.currentScore}%</span>
                     </p>
                   </div>
                 ))}
@@ -237,21 +243,21 @@ export function WorkspaceDetailView({ workspaceId }: { workspaceId: string }) {
             </Card>
           ) : null}
 
-          <Card className="surface-card border hairline">
+          <Card className="surface-card rounded-xl border hairline">
             <CardHeader>
-              <CardTitle className="font-heading text-2xl">Progress signals</CardTitle>
+              <CardTitle className="text-xl font-semibold tracking-tight">Progress signals</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {bundle.progress.length ? (
                 bundle.progress.map((record) => (
-                  <div key={record.id} className="rounded-2xl bg-[var(--surface-soft)] p-4">
+                  <div key={record.id} className="rounded-lg border hairline bg-[var(--surface-soft)] p-3.5">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="font-medium text-foreground">{record.label}</p>
-                      <span className="rounded-full bg-white/80 px-3 py-1 text-xs text-muted-foreground">
+                      <p className="text-[13px] font-medium text-foreground">{record.label}</p>
+                      <span className="rounded-md border hairline bg-card/80 px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
                         {record.currentValue}/{record.targetValue} {record.unit}
                       </span>
                     </div>
-                    <p className="mt-2 text-sm text-foreground/72">
+                    <p className="mt-2 text-[12px] text-foreground/72">
                       Confidence is currently {record.confidence}.
                     </p>
                   </div>

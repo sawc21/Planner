@@ -14,18 +14,18 @@ export function MetricCard({
   icon: LucideIcon;
 }) {
   return (
-    <Card className="surface-card border hairline">
+    <Card className="surface-card rounded-xl border hairline">
       <CardContent className="flex items-start justify-between gap-4 p-4">
         <div className="space-y-1">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
             {label}
           </p>
-          <p className="text-2xl font-semibold tracking-tight text-foreground/95">
+          <p className="font-mono text-2xl font-semibold tracking-tight text-foreground">
             {value}
           </p>
-          <p className="text-sm text-foreground/72">{detail}</p>
+          <p className="text-[12px] text-muted-foreground">{detail}</p>
         </div>
-        <span className="rounded-2xl bg-[var(--surface-soft)] p-2 text-primary">
+        <span className="rounded-md bg-primary/10 p-2 text-primary">
           <Icon className="size-4" />
         </span>
       </CardContent>

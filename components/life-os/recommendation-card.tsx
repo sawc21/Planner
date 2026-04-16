@@ -31,10 +31,12 @@ export function RecommendationCard({
 }) {
   if (!recommendations.primary) {
     return (
-      <Card className="surface-card border hairline">
+      <Card className="surface-glass rounded-2xl">
         <CardContent className="p-6">
-          <p className="font-heading text-2xl text-foreground/95">A calm open day.</p>
-          <p className="mt-2 max-w-md text-sm leading-6 text-foreground/72">
+          <p className="text-2xl font-semibold tracking-tight text-foreground">
+            A calm open day.
+          </p>
+          <p className="mt-2 max-w-md text-[13px] leading-5 text-muted-foreground">
             Nothing urgent is pressing right now. Protect one meaningful block and let the rest of
             the day stay light.
           </p>
@@ -47,26 +49,26 @@ export function RecommendationCard({
   const confidenceLabel = getConfidenceLabel(primary.score);
 
   return (
-    <Card className="surface-card overflow-hidden border hairline ring-1 ring-primary/10">
-      <CardHeader className="space-y-4 border-b hairline bg-white/55 pb-5">
+    <Card className="surface-glass overflow-hidden rounded-2xl ring-1 ring-primary/10">
+      <CardHeader className="space-y-4 border-b hairline pb-5">
         <div className="flex items-center justify-between gap-3">
-          <div className="inline-flex w-fit items-center gap-2 rounded-full bg-[var(--attention-soft)] px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-foreground">
+          <div className="inline-flex w-fit items-center gap-1.5 rounded-md bg-primary/10 px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-primary">
             <Sparkles className="size-3.5" />
             What should I do today?
           </div>
-          <span className="rounded-full bg-[var(--surface-soft)] px-3 py-1 text-xs font-medium text-foreground/72">
-            {confidenceLabel}
+          <span className="rounded-md bg-[var(--surface-soft)] px-2.5 py-1 font-mono text-[11px] font-medium text-muted-foreground">
+            <span className="text-foreground">{primary.score}</span> · {confidenceLabel}
           </span>
         </div>
         <div
           key={primary.item.id}
           className="space-y-3 animate-in fade-in-0 slide-in-from-right-3 duration-300"
         >
-          <CardTitle className="font-heading text-3xl tracking-tight text-foreground/95">
+          <CardTitle className="text-2xl font-semibold tracking-tight text-foreground">
             {primary.item.title}
           </CardTitle>
-          <p className="max-w-xl text-sm leading-6 text-foreground/78">{primary.reason}</p>
-          <p className="text-sm leading-6 text-muted-foreground">{primary.explanation}</p>
+          <p className="max-w-xl text-[13px] leading-5 text-foreground/80">{primary.reason}</p>
+          <p className="text-[13px] leading-5 text-muted-foreground">{primary.explanation}</p>
         </div>
       </CardHeader>
       <CardContent className="space-y-5 p-6">
@@ -76,23 +78,23 @@ export function RecommendationCard({
         >
           <ItemPillBadges item={primary.item} />
 
-          <div className="rounded-[24px] bg-[var(--surface-soft)] p-4">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          <div className="rounded-xl border hairline bg-[var(--surface-soft)] p-4">
+            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
               Recommendation signals
             </p>
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap gap-1.5">
               {primary.scoreBreakdown.map((signal) => (
                 <span
                   key={signal}
-                  className="rounded-full bg-white/80 px-3 py-1 text-xs font-medium text-foreground/78"
+                  className="rounded-md border hairline bg-card px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
                 >
                   {signal}
                 </span>
               ))}
             </div>
-            <p className="mt-3 text-sm text-foreground/78">
+            <p className="mt-3 text-[13px] text-muted-foreground">
               Estimated lift:{" "}
-              <span className="font-medium text-foreground">
+              <span className="font-mono font-medium text-foreground">
                 {formatEstimatedMinutes(primary.item)}
               </span>
             </p>
@@ -116,18 +118,18 @@ export function RecommendationCard({
 
         {secondary.length ? (
           <div className="space-y-3">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
               Then keep momentum with
             </p>
-            <div className="space-y-3">
+            <div className="space-y-2">
               {secondary.map((entry) => (
                 <div
                   key={entry.item.id}
-                  className="flex items-center justify-between gap-3 rounded-2xl border hairline bg-card/80 px-4 py-3"
+                  className="flex items-center justify-between gap-3 rounded-lg border hairline bg-card/80 px-3.5 py-2.5"
                 >
                   <div>
-                    <p className="font-medium text-foreground/95">{entry.item.title}</p>
-                    <p className="text-sm text-foreground/72">{entry.explanation}</p>
+                    <p className="text-[13px] font-medium text-foreground">{entry.item.title}</p>
+                    <p className="text-[12px] text-muted-foreground">{entry.explanation}</p>
                   </div>
                   <ArrowRight className="size-4 text-muted-foreground" />
                 </div>

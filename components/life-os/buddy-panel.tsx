@@ -14,36 +14,36 @@ export function BuddyPanel({
   plan?: StudyPlan;
 }) {
   return (
-    <Card className="surface-card border hairline">
+    <Card className="surface-card rounded-xl border hairline">
       <CardHeader className="space-y-3">
-        <div className="inline-flex w-fit items-center gap-2 rounded-full bg-[var(--attention-soft)] px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-foreground">
+        <div className="inline-flex w-fit items-center gap-2 rounded-md bg-[var(--attention-soft)] px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-foreground">
           <Brain className="size-3.5" />
           {insight.title}
         </div>
-        <CardTitle className="font-heading text-2xl">Context-aware planning</CardTitle>
-        <p className="text-sm leading-6 text-foreground/72">{insight.summary}</p>
+        <CardTitle className="text-xl font-semibold tracking-tight">Context-aware planning</CardTitle>
+        <p className="text-[13px] leading-5 text-foreground/72">{insight.summary}</p>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {insight.bullets.map((bullet) => (
-            <div key={bullet} className="rounded-2xl bg-[var(--surface-soft)] px-4 py-3 text-sm text-foreground/82">
+            <div key={bullet} className="rounded-lg border hairline bg-[var(--surface-soft)] px-3.5 py-2.5 text-[13px] text-foreground/82">
               {bullet}
             </div>
           ))}
         </div>
         {plan ? (
           <div className="space-y-3">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
               Suggested flow
             </p>
             {plan.steps.map((step) => (
-              <div key={step.id} className="rounded-2xl border hairline bg-white/80 p-4">
+              <div key={step.id} className="rounded-lg border hairline bg-card/80 p-3.5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="font-medium text-foreground">{step.title}</p>
-                    <p className="mt-1 text-sm text-foreground/72">{step.reason}</p>
+                    <p className="text-[13px] font-medium text-foreground">{step.title}</p>
+                    <p className="mt-1 text-[12px] text-foreground/72">{step.reason}</p>
                   </div>
-                  <span className="rounded-full bg-[var(--surface-soft)] px-3 py-1 text-xs text-muted-foreground">
+                  <span className="rounded-md border hairline bg-[var(--surface-soft)] px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
                     {step.minutes} min
                   </span>
                 </div>

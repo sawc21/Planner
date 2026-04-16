@@ -15,15 +15,15 @@ export function PageHeader({
     <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
       <div className="space-y-2">
         {eyebrow ? (
-          <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground">
+          <p className="font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-muted-foreground">
             {eyebrow}
           </p>
         ) : null}
         <div className="space-y-1">
-          <h1 className="font-heading text-3xl tracking-tight text-foreground/95 sm:text-4xl">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground/95 sm:text-3xl">
             {title}
           </h1>
-          <p className="max-w-2xl text-sm leading-6 text-foreground/72 sm:text-[15px]">
+          <p className="max-w-2xl text-[13px] leading-5 text-foreground/72 sm:text-[14px]">
             {description}
           </p>
         </div>

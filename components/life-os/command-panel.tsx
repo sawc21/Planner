@@ -28,7 +28,7 @@ export function CommandPanel() {
     <Dialog open={commandPanelOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-3xl gap-5">
         <DialogHeader>
-          <DialogTitle className="font-heading text-3xl">Command</DialogTitle>
+          <DialogTitle className="text-2xl font-semibold tracking-tight">Command</DialogTitle>
           <DialogDescription>
             A bounded local command layer for capturing work and generating a plan without turning
             the app into chat.

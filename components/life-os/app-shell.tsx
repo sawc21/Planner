@@ -63,16 +63,16 @@ function SidebarLinks({
             href={href}
             onClick={onNavigate}
             className={cn(
-              "flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium transition-colors",
+              "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors",
               active
-                ? "bg-[var(--sidebar-accent)] text-foreground shadow-sm"
-                : "text-muted-foreground hover:bg-white/70 hover:text-foreground",
+                ? "bg-[var(--sidebar-accent)] text-foreground"
+                : "text-muted-foreground hover:bg-[var(--sidebar-accent)]/60 hover:text-foreground",
             )}
           >
             <span
               className={cn(
-                "rounded-xl p-2",
-                active ? "bg-white/80 text-primary" : "bg-transparent text-muted-foreground",
+                "rounded-md p-1.5 transition-colors",
+                active ? "bg-primary/12 text-primary" : "bg-transparent text-muted-foreground",
               )}
             >
               <Icon className="size-4" />
@@ -118,32 +118,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen px-3 py-3 sm:px-4 sm:py-4">
-      <div className="mx-auto flex max-w-[1560px] gap-4">
-        <aside className="surface-panel sticky top-4 hidden h-[calc(100vh-2rem)] w-[300px] shrink-0 rounded-[28px] border hairline lg:flex lg:flex-col">
+    <div className="min-h-screen px-4 py-4 sm:px-6 sm:py-5">
+      <div className="mx-auto flex max-w-[1440px] gap-4">
+        <aside className="surface-glass sticky top-4 hidden h-[calc(100vh-2rem)] w-[260px] shrink-0 rounded-2xl lg:flex lg:flex-col">
           <div className="space-y-5 p-5">
-            <div className="space-y-2">
-              <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground">
+            <div className="space-y-1.5">
+              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-muted-foreground">
                 Life OS
               </p>
               <div>
-                <h2 className="font-heading text-3xl text-foreground/95">Plan, track, study.</h2>
-                <p className="mt-2 text-sm leading-6 text-foreground/72">
-                  One shared system for life admin, coursework, and structured learning flows.
+                <h2 className="text-xl font-semibold tracking-tight text-foreground">
+                  Plan, track, study.
+                </h2>
+                <p className="mt-1.5 text-[13px] leading-5 text-muted-foreground">
+                  One system for coursework, life admin, and focus.
                 </p>
               </div>
             </div>
 
-            <div className="rounded-[24px] bg-white/74 p-4">
+            <div className="rounded-xl border hairline bg-card/60 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                  <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
                     Utility zone
                   </p>
-                  <p className="mt-1 font-medium text-foreground">
+                  <p className="mt-1 text-[13px] font-medium text-foreground">
                     {format(today, "EEEE, MMM d")}
                   </p>
-                  <p className="mt-1 text-sm text-foreground/72">
+                  <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
                     {overdueTasks} overdue tasks still need relief, with {constraintProfile.hoursRemainingThisWeek} study hours and ${constraintProfile.budgetRemainingThisWeek} left this week.
                   </p>
                 </div>
@@ -151,18 +153,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <Plus className="size-4" />
                 </Button>
               </div>
-              <div className="mt-4 h-2 rounded-full bg-[var(--surface-soft)]">
+              <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[var(--surface-soft)]">
                 <div
-                  className="h-2 rounded-full bg-primary transition-[width] duration-300"
+                  className="h-1.5 rounded-full bg-primary transition-[width] duration-300"
                   style={{ width: `${weekProgress}%` }}
                 />
               </div>
-              <div className="mt-3 flex flex-wrap gap-2 text-xs text-foreground/72">
-                <span className="rounded-full bg-[var(--surface-soft)] px-3 py-1">
-                  {weekProgress}% through the week
+              <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
+                <span className="rounded-md bg-[var(--surface-soft)] px-2 py-0.5">
+                  <span className="font-mono">{weekProgress}%</span> through the week
                 </span>
-                <span className="rounded-full bg-[var(--surface-soft)] px-3 py-1">
-                  {overdueTasks} overdue
+                <span className="rounded-md bg-[var(--surface-soft)] px-2 py-0.5">
+                  <span className="font-mono">{overdueTasks}</span> overdue
                 </span>
               </div>
             </div>
@@ -173,14 +175,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </ScrollArea>
 
           <div className="border-t hairline p-4">
-            <div className="rounded-[24px] bg-white/70 p-4">
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            <div className="rounded-xl border hairline bg-card/60 p-4">
+              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
                 Daily anchor
               </p>
-              <p className="mt-2 font-medium text-foreground/95">
+              <p className="mt-2 text-[13px] font-medium text-foreground">
                 {recommendation?.item.title ?? "Protect some white space."}
               </p>
-              <p className="mt-1 text-sm leading-6 text-foreground/72">
+              <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
                 {recommendation?.explanation ??
                   "The board is calm enough to choose one meaningful next move."}
               </p>
@@ -189,7 +191,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </aside>
 
         <div className="min-w-0 flex-1">
-          <div className="surface-panel mb-4 rounded-[28px] border hairline px-4 py-4 sm:px-5">
+          <div className="surface-panel mb-4 rounded-2xl border hairline px-4 py-3.5 sm:px-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-center gap-3">
                 <Button
@@ -202,28 +204,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <Menu className="size-4" />
                 </Button>
                 <div>
-                  <p className="text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">
+                  <p className="font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-muted-foreground">
                     {format(new Date(), "EEEE, MMMM d")}
                   </p>
-                  <p className="mt-1 text-sm font-medium text-foreground/88">
+                  <p className="mt-1 text-[13px] font-medium text-foreground">
                     {recommendation
                       ? `Lead with ${recommendation.item.title.toLowerCase()}.`
                       : "Your board looks calm today."}
                   </p>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="rounded-full bg-white/70 px-3 py-2 text-muted-foreground">
-                  {atRiskWorkspaces.length} at-risk workspaces
+              <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
+                <span className="rounded-md border hairline bg-card/60 px-2.5 py-1 text-muted-foreground">
+                  <span className="font-mono text-foreground">{atRiskWorkspaces.length}</span>{" "}
+                  at-risk workspaces
                 </span>
-                <span className="rounded-full bg-white/70 px-3 py-2 text-muted-foreground">
-                  {overdueTasks} overdue tasks
+                <span className="rounded-md border hairline bg-card/60 px-2.5 py-1 text-muted-foreground">
+                  <span className="font-mono text-foreground">{overdueTasks}</span> overdue tasks
                 </span>
-                <span className="rounded-full bg-white/70 px-3 py-2 text-muted-foreground">
+                <span className="rounded-md border hairline bg-card/60 px-2.5 py-1 font-mono text-muted-foreground">
                   {constraintProfile.hoursRemainingThisWeek} hours left
                 </span>
-                <span className="rounded-full bg-white/70 px-3 py-2 text-muted-foreground">
-                  ${constraintProfile.budgetRemainingThisWeek} budget left
+                <span className="rounded-md border hairline bg-card/60 px-2.5 py-1 text-muted-foreground">
+                  <span className="font-mono text-foreground">
+                    ${constraintProfile.budgetRemainingThisWeek}
+                  </span>{" "}
+                  budget
                 </span>
               </div>
             </div>
@@ -234,9 +240,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-        <SheetContent side="left" className="w-[88vw] max-w-sm bg-[var(--surface-soft)]">
-          <SheetHeader className="space-y-2">
-            <SheetTitle className="font-heading text-3xl">Life OS</SheetTitle>
+        <SheetContent side="left" className="surface-glass w-[88vw] max-w-sm">
+          <SheetHeader className="space-y-1.5">
+            <SheetTitle className="text-xl font-semibold tracking-tight">Life OS</SheetTitle>
             <SheetDescription>
               A shared operating system for study flows, life admin, and the week ahead.
             </SheetDescription>
@@ -244,11 +250,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="px-4 pb-5">
             <SidebarLinks pathname={pathname} onNavigate={() => setMobileNavOpen(false)} />
             <Separator className="my-5" />
-            <div className="rounded-[24px] bg-white/80 p-4">
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            <div className="rounded-xl border hairline bg-card/60 p-4">
+              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
                 Next best move
               </p>
-              <p className="mt-2 font-medium text-foreground/95">
+              <p className="mt-2 text-[13px] font-medium text-foreground">
                 {recommendation?.item.title ?? "Protect some white space."}
               </p>
               <Link
@@ -271,9 +277,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <Plus className="size-4" />
                 Quick add
               </Button>
-              <div className="mt-4 rounded-2xl bg-[var(--surface-soft)] p-3">
+              <div className="mt-4 rounded-lg bg-[var(--surface-soft)] p-3">
                 <BriefcaseBusiness className="size-4 text-primary" />
-                <p className="mt-2 text-sm text-foreground/82">
+                <p className="mt-2 text-[13px] text-muted-foreground">
                   {atRiskWorkspaces[0]
                     ? `${atRiskWorkspaces[0].workspace.shortLabel} is currently the most exposed workspace.`
                     : "No workspace is clearly slipping right now."}

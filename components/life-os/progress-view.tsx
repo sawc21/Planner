@@ -26,27 +26,27 @@ export function ProgressView() {
       />
 
       <section className="space-y-4">
-        <h2 className="font-heading text-2xl text-foreground">Course grade board</h2>
+        <h2 className="text-xl font-semibold tracking-tight text-foreground">Course grade board</h2>
         <div className="grid gap-4 xl:grid-cols-2">
           {courseCards.length ? (
             courseCards.map((card) => (
-              <Card key={card.workspace.id} className="surface-card border hairline">
+              <Card key={card.workspace.id} className="surface-card rounded-xl border hairline">
                 <CardHeader>
-                  <CardTitle className="font-heading text-2xl">{card.workspace.name}</CardTitle>
-                  <p className="text-sm leading-6 text-foreground/72">{card.detail}</p>
+                  <CardTitle className="text-xl font-semibold tracking-tight">{card.workspace.name}</CardTitle>
+                  <p className="text-[13px] leading-5 text-foreground/72">{card.detail}</p>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="rounded-2xl bg-[var(--surface-soft)] p-4">
-                    <p className="font-medium text-foreground">{card.title}</p>
-                    <p className="mt-1 text-sm text-foreground/72">
-                      Target: {card.targetValue}%
+                  <div className="rounded-lg border hairline bg-[var(--surface-soft)] p-3.5">
+                    <p className="text-[13px] font-medium text-foreground">{card.title}</p>
+                    <p className="mt-1 text-[12px] text-foreground/72">
+                      Target: <span className="font-mono">{card.targetValue}%</span>
                     </p>
                   </div>
                   {card.neededOnNext != null ? (
-                    <div className="rounded-2xl bg-[var(--attention-soft)] p-4">
+                    <div className="rounded-lg border hairline bg-[var(--attention-soft)] p-3.5">
                       <Target className="size-4 text-foreground" />
-                      <p className="mt-2 text-sm text-foreground/82">
-                        What-if view: hitting roughly {card.neededOnNext}% on the next weighted item keeps this course on track.
+                      <p className="mt-2 text-[12px] text-foreground/82">
+                        What-if view: hitting roughly <span className="font-mono">{card.neededOnNext}%</span> on the next weighted item keeps this course on track.
                       </p>
                     </div>
                   ) : null}
@@ -63,21 +63,21 @@ export function ProgressView() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="font-heading text-2xl text-foreground">Study track momentum</h2>
+        <h2 className="text-xl font-semibold tracking-tight text-foreground">Study track momentum</h2>
         <div className="grid gap-4 xl:grid-cols-2">
           {trackCards.length ? (
             trackCards.map((card) => (
-              <Card key={card.workspace.id} className="surface-card border hairline">
+              <Card key={card.workspace.id} className="surface-card rounded-xl border hairline">
                 <CardHeader>
-                  <CardTitle className="font-heading text-2xl">{card.workspace.name}</CardTitle>
-                  <p className="text-sm leading-6 text-foreground/72">{card.detail}</p>
+                  <CardTitle className="text-xl font-semibold tracking-tight">{card.workspace.name}</CardTitle>
+                  <p className="text-[13px] leading-5 text-foreground/72">{card.detail}</p>
                 </CardHeader>
                 <CardContent>
-                  <div className="rounded-2xl bg-[var(--surface-soft)] p-4">
-                    <p className="font-medium text-foreground">{card.title}</p>
-                    <div className="mt-3 h-2 rounded-full bg-white/80">
+                  <div className="rounded-lg border hairline bg-[var(--surface-soft)] p-3.5">
+                    <p className="text-[13px] font-medium text-foreground">{card.title}</p>
+                    <div className="mt-3 h-1.5 rounded-full bg-border/70">
                       <div
-                        className="h-2 rounded-full bg-primary"
+                        className="h-1.5 rounded-full bg-primary"
                         style={{
                           width: `${Math.min(100, (card.currentValue / Math.max(card.targetValue ?? 1, 1)) * 100)}%`,
                         }}
@@ -97,18 +97,18 @@ export function ProgressView() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="font-heading text-2xl text-foreground">Life and work progress</h2>
+        <h2 className="text-xl font-semibold tracking-tight text-foreground">Life and work progress</h2>
         <div className="grid gap-4 xl:grid-cols-3">
           {lifeCards.map((card) => (
-            <Card key={card.workspace.id} className="surface-card border hairline">
+            <Card key={card.workspace.id} className="surface-card rounded-xl border hairline">
               <CardHeader>
-                <CardTitle className="font-heading text-2xl">{card.workspace.name}</CardTitle>
+                <CardTitle className="text-xl font-semibold tracking-tight">{card.workspace.name}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="rounded-2xl bg-[var(--surface-soft)] p-4">
+                <div className="rounded-lg border hairline bg-[var(--surface-soft)] p-3.5">
                   <TrendingUp className="size-4 text-primary" />
-                  <p className="mt-2 font-medium text-foreground">{card.title}</p>
-                  <p className="mt-1 text-sm text-foreground/72">{card.detail}</p>
+                  <p className="mt-2 text-[13px] font-medium text-foreground">{card.title}</p>
+                  <p className="mt-1 text-[12px] text-foreground/72">{card.detail}</p>
                 </div>
               </CardContent>
             </Card>

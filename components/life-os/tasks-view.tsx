@@ -127,7 +127,7 @@ export function TasksView({ initialQueryString = "" }: { initialQueryString?: st
         description="Assignments, study sessions, bills, errands, and work tasks stay in one system, but you can still filter hard by workspace, urgency, status, and type."
       />
 
-      <div className="surface-panel rounded-[28px] border hairline p-4 sm:p-5">
+      <div className="surface-panel rounded-2xl border hairline p-4 sm:p-5">
         <div className="flex flex-col gap-4">
           <Tabs
             value={filters.kind}
@@ -157,7 +157,7 @@ export function TasksView({ initialQueryString = "" }: { initialQueryString?: st
                   setFilters((current) => ({ ...current, query: event.target.value }))
                 }
                 placeholder="Search titles, notes, workspaces, or tags"
-                className="h-11 rounded-2xl bg-white/70 pl-10"
+                className="h-11 rounded-xl bg-card/80 pl-10"
               />
             </div>
 
@@ -171,7 +171,7 @@ export function TasksView({ initialQueryString = "" }: { initialQueryString?: st
                   }))
                 }
               >
-                <SelectTrigger className="w-full rounded-2xl bg-white/70 sm:w-[200px]">
+                <SelectTrigger className="w-full rounded-xl bg-card/80 sm:w-[200px]">
                   <SelectValue placeholder="All workspaces" />
                 </SelectTrigger>
                 <SelectContent>
@@ -193,7 +193,7 @@ export function TasksView({ initialQueryString = "" }: { initialQueryString?: st
                   }))
                 }
               >
-                <SelectTrigger className="w-full rounded-2xl bg-white/70 sm:w-[180px]">
+                <SelectTrigger className="w-full rounded-xl bg-card/80 sm:w-[180px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -215,7 +215,7 @@ export function TasksView({ initialQueryString = "" }: { initialQueryString?: st
                   }))
                 }
               >
-                <SelectTrigger className="w-full rounded-2xl bg-white/70 sm:w-[180px]">
+                <SelectTrigger className="w-full rounded-xl bg-card/80 sm:w-[180px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

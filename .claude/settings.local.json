@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(taskkill //PID 44052 //F)",
+      "Bash(taskkill //PID 33212 //F)",
+      "Bash(taskkill //PID 33908 //F)",
+      "mcp__Claude_Preview__preview_start"
+    ]
+  }
+}
