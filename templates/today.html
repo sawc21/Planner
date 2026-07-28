@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% from "partials/block_card.html" import block_card %}
+{% set page_title = "Today" %}
+{% set page_id = "today" %}
+{% set section_label = semester_name|default("ACTIVE SEMESTER") %}
+{% set page_heading = date_label|default(selected_date|day) %}
+{% set page_subtitle = day_context|default("Your full day, from first alarm to lights out.") %}
+
+{% block header_actions %}
+<div class="date-stepper" aria-label="Choose day">
+  <a href="/?day={{ previous_date }}" aria-label="Previous day">Prev</a>
+  <a href="/" class="date-today">Today</a>
+  <a href="/?day={{ next_date }}" aria-label="Next day">Next</a>
+</div>
+{{ super() }}
+{% endblock %}
+
+{% block content %}
+{% set return_to = '/?day=' ~ selected_date if selected_date else '/' %}
+<section class="command-strip" aria-label="Daily summary">
+  <article class="command-card command-progress">
+    <div class="radial-progress" style="--progress: {{ summary.completion_percent|default(0) }}"><span>{{ summary.completion_percent|default(0) }}<small>%</small></span></div>
+    <div><span>Daily execution</span><strong>{{ summary.completed_blocks|default(0) }} of {{ summary.trackable_blocks|default(0) }} blocks</strong></div>
+  </article>
+  <article class="command-card">
+    <span class="metric-code">FUEL</span>
+    <strong>{{ summary.calories_consumed|default(0) }} <small>/ {{ summary.calorie_target|default(0) }} kcal</small></strong>
+    <div class="meter"><i style="width: {{ summary.calorie_percent|default(0) }}%"></i></div>
+    <p>{{ summary.protein_consumed|default(0) }}g of {{ summary.protein_target|default(0) }}g protein</p>
+  </article>
+  <article class="command-card">
+    <span class="metric-code">TRAIN</span>
+    <strong>{{ summary.workout_sets_completed|default(0) }} <small>/ {{ summary.workout_sets_total|default(0) }} sets</small></strong>
+    <div class="meter meter-rust"><i style="width: {{ summary.workout_percent|default(0) }}%"></i></div>
+    <p>{{ summary.workout_actual_minutes|default(0) }} actual minutes logged</p>
+  </article>
+  <article class="command-card sync-card {% if sync.dirty_count|default(0) %}has-work{% endif %}">
+    <span class="metric-code">SYNC</span>
+    <strong>{% if sync.dirty_count|default(0) %}{{ sync.dirty_count }} local change{% if sync.dirty_count != 1 %}s{% endif %}{% else %}Calendar clear{% endif %}</strong>
+    <p>{% if sync.last_success_at %}Last synced {{ sync.last_success_at|time }}{% else %}Not synced yet{% endif %}</p>
+  </article>
+</section>
+
+<section class="timeline-section">
+  <div class="section-heading">
+    <div><span>DAY PLAN</span><h2>{{ blocks|length }} scheduled blocks</h2></div>
+    <div class="legend"><span><i class="legend-fixed"></i>Fixed</span><span><i class="legend-flexible"></i>Flexible</span><span><i class="legend-optional"></i>Optional</span></div>
+  </div>
+
+  {% if current_block %}
+  <aside class="now-banner">
+    <span>NOW / {{ now_label|default('') }}</span>
+    <strong>{{ current_block.title }}</strong>
+    <p>{{ current_block.remaining_minutes|default(0)|duration }} remaining</p>
+  </aside>
+  {% endif %}
+
+  <div class="timeline">
+    {% for block in blocks %}
+      {% if block.gap_before_minutes|default(0) >= 30 %}
+      <div class="open-window">
+        <span>{{ block.gap_before_minutes|duration }} open</span>
+        <i></i>
+      </div>
+      {% endif %}
+      {{ block_card(block, csrf_token, return_to) }}
+    {% else %}
+    <div class="empty-state">
+      <span class="empty-index">00</span>
+      <h2>No blocks planned</h2>
+      <p>This day is intentionally open. Import a schedule through MCP or move a flexible block here from Week.</p>
+      <a class="button button-primary" href="/imports">Review imports</a>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

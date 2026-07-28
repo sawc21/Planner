@@ -1,0 +1,990 @@
+{
+  "$defs": {
+    "BlockCategory": {
+      "enum": [
+        "wake",
+        "sleep",
+        "commute",
+        "class",
+        "work",
+        "study",
+        "meal",
+        "workout",
+        "chore",
+        "appointment",
+        "free_time",
+        "custom"
+      ],
+      "title": "BlockCategory",
+      "type": "string"
+    },
+    "ChangeOperation": {
+      "enum": [
+        "add",
+        "update",
+        "cancel"
+      ],
+      "title": "ChangeOperation",
+      "type": "string"
+    },
+    "ChecklistInput": {
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "position": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Position",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "title": "ChecklistInput",
+      "type": "object"
+    },
+    "Flexibility": {
+      "enum": [
+        "fixed",
+        "flexible",
+        "optional"
+      ],
+      "title": "Flexibility",
+      "type": "string"
+    },
+    "ImportEntityType": {
+      "enum": [
+        "semester",
+        "template",
+        "occurrence"
+      ],
+      "title": "ImportEntityType",
+      "type": "string"
+    },
+    "ImportMode": {
+      "enum": [
+        "replace_scope",
+        "patch"
+      ],
+      "title": "ImportMode",
+      "type": "string"
+    },
+    "ImportScope": {
+      "additionalProperties": false,
+      "properties": {
+        "semester_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Semester Id"
+        },
+        "start_date": {
+          "format": "date",
+          "title": "Start Date",
+          "type": "string"
+        },
+        "end_date": {
+          "format": "date",
+          "title": "End Date",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start_date",
+        "end_date"
+      ],
+      "title": "ImportScope",
+      "type": "object"
+    },
+    "MealItemInput": {
+      "additionalProperties": false,
+      "properties": {
+        "food_name": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Food Name",
+          "type": "string"
+        },
+        "unit": {
+          "default": "serving",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Unit",
+          "type": "string"
+        },
+        "planned_quantity": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "1",
+          "title": "Planned Quantity"
+        },
+        "calories_per_unit": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "0",
+          "title": "Calories Per Unit"
+        },
+        "protein_grams_per_unit": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "0",
+          "title": "Protein Grams Per Unit"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "position": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Position",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "food_name"
+      ],
+      "title": "MealItemInput",
+      "type": "object"
+    },
+    "OccurrenceInput": {
+      "additionalProperties": false,
+      "properties": {
+        "source_key": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Source Key",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "category": {
+          "$ref": "#/$defs/BlockCategory",
+          "default": "custom"
+        },
+        "flexibility": {
+          "$ref": "#/$defs/Flexibility",
+          "default": "flexible"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 10000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "location": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Location"
+        },
+        "priority": {
+          "default": 50,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Priority",
+          "type": "integer"
+        },
+        "preferred_duration_minutes": {
+          "anyOf": [
+            {
+              "maximum": 10080,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Preferred Duration Minutes"
+        },
+        "minimum_duration_minutes": {
+          "anyOf": [
+            {
+              "maximum": 10080,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Minimum Duration Minutes"
+        },
+        "may_split": {
+          "default": false,
+          "title": "May Split",
+          "type": "boolean"
+        },
+        "requires_completion": {
+          "default": true,
+          "title": "Requires Completion",
+          "type": "boolean"
+        },
+        "calendar_projection": {
+          "default": true,
+          "title": "Calendar Projection",
+          "type": "boolean"
+        },
+        "checklist_items": {
+          "items": {
+            "$ref": "#/$defs/ChecklistInput"
+          },
+          "title": "Checklist Items",
+          "type": "array"
+        },
+        "meal_items": {
+          "items": {
+            "$ref": "#/$defs/MealItemInput"
+          },
+          "title": "Meal Items",
+          "type": "array"
+        },
+        "workout_exercises": {
+          "items": {
+            "$ref": "#/$defs/WorkoutExerciseInput"
+          },
+          "title": "Workout Exercises",
+          "type": "array"
+        },
+        "occurrence_date": {
+          "format": "date",
+          "title": "Occurrence Date",
+          "type": "string"
+        },
+        "start_time": {
+          "format": "time",
+          "title": "Start Time",
+          "type": "string"
+        },
+        "duration_minutes": {
+          "maximum": 10080,
+          "minimum": 1,
+          "title": "Duration Minutes",
+          "type": "integer"
+        },
+        "earliest_start_time": {
+          "anyOf": [
+            {
+              "format": "time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Earliest Start Time"
+        },
+        "latest_end_time": {
+          "anyOf": [
+            {
+              "format": "time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latest End Time"
+        },
+        "template_source_key": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Template Source Key"
+        },
+        "assignment_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Assignment Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "source_key",
+        "title",
+        "occurrence_date",
+        "start_time",
+        "duration_minutes"
+      ],
+      "title": "OccurrenceInput",
+      "type": "object"
+    },
+    "PatchOperation": {
+      "additionalProperties": false,
+      "properties": {
+        "operation": {
+          "$ref": "#/$defs/ChangeOperation"
+        },
+        "entity_type": {
+          "$ref": "#/$defs/ImportEntityType"
+        },
+        "target_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Id"
+        },
+        "target_source_key": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Source Key"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "operation",
+        "entity_type"
+      ],
+      "title": "PatchOperation",
+      "type": "object"
+    },
+    "SemesterInput": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "start_date": {
+          "format": "date",
+          "title": "Start Date",
+          "type": "string"
+        },
+        "end_date": {
+          "format": "date",
+          "title": "End Date",
+          "type": "string"
+        },
+        "timezone": {
+          "const": "America/Chicago",
+          "default": "America/Chicago",
+          "title": "Timezone",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "start_date",
+        "end_date"
+      ],
+      "title": "SemesterInput",
+      "type": "object"
+    },
+    "SourceMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "filename": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filename"
+        },
+        "media_type": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Media Type"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-fA-F]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sha256"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        }
+      },
+      "title": "SourceMetadata",
+      "type": "object"
+    },
+    "TemplateInput": {
+      "additionalProperties": false,
+      "properties": {
+        "source_key": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Source Key",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "category": {
+          "$ref": "#/$defs/BlockCategory",
+          "default": "custom"
+        },
+        "flexibility": {
+          "$ref": "#/$defs/Flexibility",
+          "default": "flexible"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 10000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "location": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Location"
+        },
+        "priority": {
+          "default": 50,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Priority",
+          "type": "integer"
+        },
+        "preferred_duration_minutes": {
+          "anyOf": [
+            {
+              "maximum": 10080,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Preferred Duration Minutes"
+        },
+        "minimum_duration_minutes": {
+          "anyOf": [
+            {
+              "maximum": 10080,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Minimum Duration Minutes"
+        },
+        "may_split": {
+          "default": false,
+          "title": "May Split",
+          "type": "boolean"
+        },
+        "requires_completion": {
+          "default": true,
+          "title": "Requires Completion",
+          "type": "boolean"
+        },
+        "calendar_projection": {
+          "default": true,
+          "title": "Calendar Projection",
+          "type": "boolean"
+        },
+        "checklist_items": {
+          "items": {
+            "$ref": "#/$defs/ChecklistInput"
+          },
+          "title": "Checklist Items",
+          "type": "array"
+        },
+        "meal_items": {
+          "items": {
+            "$ref": "#/$defs/MealItemInput"
+          },
+          "title": "Meal Items",
+          "type": "array"
+        },
+        "workout_exercises": {
+          "items": {
+            "$ref": "#/$defs/WorkoutExerciseInput"
+          },
+          "title": "Workout Exercises",
+          "type": "array"
+        },
+        "weekdays": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 7,
+          "minItems": 1,
+          "title": "Weekdays",
+          "type": "array"
+        },
+        "start_time": {
+          "format": "time",
+          "title": "Start Time",
+          "type": "string"
+        },
+        "duration_minutes": {
+          "maximum": 10080,
+          "minimum": 1,
+          "title": "Duration Minutes",
+          "type": "integer"
+        },
+        "effective_start_date": {
+          "format": "date",
+          "title": "Effective Start Date",
+          "type": "string"
+        },
+        "effective_end_date": {
+          "format": "date",
+          "title": "Effective End Date",
+          "type": "string"
+        },
+        "excluded_dates": {
+          "items": {
+            "format": "date",
+            "type": "string"
+          },
+          "title": "Excluded Dates",
+          "type": "array"
+        },
+        "earliest_start_time": {
+          "anyOf": [
+            {
+              "format": "time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Earliest Start Time"
+        },
+        "latest_end_time": {
+          "anyOf": [
+            {
+              "format": "time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latest End Time"
+        }
+      },
+      "required": [
+        "source_key",
+        "title",
+        "weekdays",
+        "start_time",
+        "duration_minutes",
+        "effective_start_date",
+        "effective_end_date"
+      ],
+      "title": "TemplateInput",
+      "type": "object"
+    },
+    "UnresolvedField": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "reason"
+      ],
+      "title": "UnresolvedField",
+      "type": "object"
+    },
+    "WorkoutExerciseInput": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "planned_sets": {
+          "default": 1,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Planned Sets",
+          "type": "integer"
+        },
+        "rep_min": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rep Min"
+        },
+        "rep_max": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rep Max"
+        },
+        "target_weight": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Weight"
+        },
+        "weight_unit": {
+          "default": "lb",
+          "enum": [
+            "lb",
+            "kg"
+          ],
+          "title": "Weight Unit",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "position": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Position",
+          "type": "integer"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        },
+        "sets": {
+          "items": {
+            "$ref": "#/$defs/WorkoutSetInput"
+          },
+          "title": "Sets",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "WorkoutExerciseInput",
+      "type": "object"
+    },
+    "WorkoutSetInput": {
+      "additionalProperties": false,
+      "properties": {
+        "set_number": {
+          "minimum": 1,
+          "title": "Set Number",
+          "type": "integer"
+        },
+        "target_reps": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Reps"
+        }
+      },
+      "required": [
+        "set_number"
+      ],
+      "title": "WorkoutSetInput",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "mode": {
+      "$ref": "#/$defs/ImportMode"
+    },
+    "managed_dataset": {
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,99}$",
+      "title": "Managed Dataset",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "maxLength": 200,
+      "minLength": 8,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "base_revision": {
+      "minimum": 0,
+      "title": "Base Revision",
+      "type": "integer"
+    },
+    "scope": {
+      "$ref": "#/$defs/ImportScope"
+    },
+    "semester": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SemesterInput"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "source": {
+      "$ref": "#/$defs/SourceMetadata"
+    },
+    "assumptions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Assumptions",
+      "type": "array"
+    },
+    "unresolved_fields": {
+      "items": {
+        "$ref": "#/$defs/UnresolvedField"
+      },
+      "title": "Unresolved Fields",
+      "type": "array"
+    },
+    "templates": {
+      "items": {
+        "$ref": "#/$defs/TemplateInput"
+      },
+      "title": "Templates",
+      "type": "array"
+    },
+    "occurrences": {
+      "items": {
+        "$ref": "#/$defs/OccurrenceInput"
+      },
+      "title": "Occurrences",
+      "type": "array"
+    },
+    "operations": {
+      "items": {
+        "$ref": "#/$defs/PatchOperation"
+      },
+      "title": "Operations",
+      "type": "array"
+    }
+  },
+  "required": [
+    "mode",
+    "managed_dataset",
+    "idempotency_key",
+    "base_revision",
+    "scope"
+  ],
+  "title": "Semester Ops Import v1",
+  "type": "object",
+  "$id": "https://semester-ops.local/schemas/import-v1.json"
+}

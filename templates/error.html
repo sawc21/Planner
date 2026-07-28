@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% set page_title = "Action needed" %}
+{% set page_id = "error" %}
+{% set section_label = "SEMESTER OPS / STOP" %}
+{% set page_heading = error_title|default("Something needs attention") %}
+{% set page_subtitle = "No live schedule change was reported as successful." %}
+
+{% block header_actions %}<a class="button button-quiet" href="/">Return to Today</a>{% endblock %}
+{% block content %}
+<section class="error-stage">
+  <span class="error-code">!</span>
+  <div><h2>{{ error_title|default("Request failed") }}</h2><p>{{ error_message|default("The request could not be completed.") }}</p><div class="error-actions"><button class="button button-primary" type="button" data-go-back>Go back</button><a class="button button-secondary" href="/settings">Open settings</a></div></div>
+</section>
+{% endblock %}

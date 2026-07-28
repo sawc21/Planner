@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% set page_title = "Edit block" %}
+{% set page_id = "edit-block" %}
+{% set section_label = "PRECISE SCHEDULE EDIT" %}
+{% set page_heading = block.title|default("Edit schedule block") %}
+{% set page_subtitle = "Manual control always wins. Fixed means AI cannot move it; you still can." %}
+
+{% block header_actions %}
+<a class="button button-quiet" href="{{ return_to|default('/') }}">Cancel</a>
+{% endblock %}
+
+{% block content %}
+<div class="edit-layout">
+  <form method="post" action="/blocks/{{ block.id }}/edit" class="panel edit-form">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="return_to" value="{{ return_to|default('/') }}">
+    <div class="panel-heading"><span>01</span><div><h2>Block identity</h2><p>Calendar receives the parent block, not its private details.</p></div></div>
+    <label class="field field-wide"><span>Title</span><input type="text" name="title" maxlength="160" required value="{{ block.title }}"></label>
+    <div class="field-grid">
+      <label class="field"><span>Category</span><select name="category">{% for category in categories %}<option value="{{ category.value }}" {% if category.value == block.category %}selected{% endif %}>{{ category.label }}</option>{% endfor %}</select></label>
+      <label class="field"><span>Movement rule</span><select name="flexibility"><option value="fixed" {% if block.flexibility == 'fixed' %}selected{% endif %}>Fixed / AI cannot move</option><option value="flexible" {% if block.flexibility == 'flexible' %}selected{% endif %}>Flexible / AI may propose</option><option value="optional" {% if block.flexibility == 'optional' %}selected{% endif %}>Optional / first to drop</option></select></label>
+    </div>
+
+    <div class="panel-heading panel-subheading"><span>02</span><div><h2>Planned time</h2><p>Entered and displayed in {{ timezone|default('America/Chicago') }}.</p></div></div>
+    <div class="field-grid two-up">
+      <label class="field"><span>Starts</span><input type="datetime-local" name="planned_start_local" required value="{{ block.start_local|datetime_local }}"></label>
+      <label class="field"><span>Ends</span><input type="datetime-local" name="planned_end_local" required value="{{ block.end_local|datetime_local }}"></label>
+    </div>
+    {% if block.conflicts %}<div class="inline-alert"><strong>Overlap warning</strong><span>{{ block.conflicts|join(', ') }}</span></div>{% endif %}
+
+    <label class="field field-wide"><span>Notes</span><textarea name="notes" maxlength="4000" rows="5" placeholder="What will make this block easier to execute?">{{ block.notes|default('') }}</textarea></label>
+    <label class="switch-row"><input type="checkbox" name="project_to_calendar" value="true" {% if block.project_to_calendar|default(true) %}checked{% endif %}><span class="switch"></span><span><strong>Project parent block to Google Calendar</strong><small>Checklist, meal, and workout details remain private in Semester Ops.</small></span></label>
+    <div class="form-footer"><span>Editing an occurrence creates an override without changing its whole recurring template.</span><button class="button button-primary" type="submit">Save block</button></div>
+  </form>
+
+  <aside class="panel audit-card"><span class="panel-code">BLOCK RECORD</span><dl><div><dt>Status</dt><dd>{{ block.status|default('planned')|replace('_', ' ')|title }}</dd></div><div><dt>Source</dt><dd>{{ block.source_label|default('Manual') }}</dd></div><div><dt>Revision</dt><dd>{{ block.revision|default(0) }}</dd></div><div><dt>Google</dt><dd>{% if block.unsynced %}Local changes waiting{% elif block.calendar_event_id %}Projected{% else %}Not projected{% endif %}</dd></div></dl>{% if block.actual_start_local %}<hr><h3>Actual execution</h3><p>{{ block.actual_start_local|time }}{% if block.actual_end_local %} - {{ block.actual_end_local|time }}{% endif %}</p>{% endif %}</aside>
+</div>
+{% endblock %}

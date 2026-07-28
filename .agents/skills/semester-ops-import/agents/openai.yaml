@@ -1,0 +1,4 @@
+interface:
+  display_name: "Semester Ops Import"
+  short_description: "Create safe, review-only Semester Ops drafts"
+  default_prompt: "Use $semester-ops-import to turn these schedule documents into a review-only Semester Ops draft."

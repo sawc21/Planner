@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% set page_title = "Week" %}
+{% set page_id = "week" %}
+{% set section_label = "WEEKLY FIELD MAP" %}
+{% set page_heading = week_label|default("This week") %}
+{% set page_subtitle = "Scan the load, find the collisions, then make the week livable." %}
+
+{% block header_actions %}
+<div class="date-stepper" aria-label="Choose week">
+  <a href="/week?anchor={{ previous_anchor }}">Prev</a>
+  <a href="/week" class="date-today">This week</a>
+  <a href="/week?anchor={{ next_anchor }}">Next</a>
+</div>
+{{ super() }}
+{% endblock %}
+
+{% block content %}
+<section class="week-summary">
+  <div><span>PLANNED LOAD</span><strong>{{ summary.planned_hours|default(0) }}h</strong><small>{{ summary.block_count|default(0) }} blocks</small></div>
+  <div><span>FIXED TIME</span><strong>{{ summary.fixed_hours|default(0) }}h</strong><small>protected commitments</small></div>
+  <div><span>FLEX CAPACITY</span><strong>{{ summary.open_hours|default(0) }}h</strong><small>visible open windows</small></div>
+  <div class="{% if summary.conflict_count|default(0) %}metric-warning{% endif %}"><span>COLLISIONS</span><strong>{{ summary.conflict_count|default(0) }}</strong><small>{% if summary.conflict_count|default(0) %}needs attention{% else %}clear{% endif %}</small></div>
+</section>
+
+<section class="week-board" aria-label="Week schedule">
+  {% for day in days %}
+  <article class="week-day {% if day.is_today %}is-today{% endif %}">
+    <header>
+      <span>{{ day.weekday_short }}</span>
+      <strong>{{ day.day_number }}</strong>
+      {% if day.is_today %}<em>Today</em>{% endif %}
+    </header>
+    <div class="week-day-body">
+      {% for block in day.blocks %}
+      <a href="/blocks/{{ block.id }}/edit?return_to={{ ('/week?anchor=' ~ anchor_date)|urlencode }}" class="week-block category-{{ block.category|default('custom') }} status-{{ block.status|default('planned') }} {% if block.conflict %}has-conflict{% endif %}">
+        <span>{{ block.start_local|time }}</span>
+        <strong>{{ block.title }}</strong>
+        <small>{{ block.duration_minutes|duration }} / {{ block.flexibility|default('flexible') }}</small>
+        {% if block.checklist_progress %}<i style="width: {{ block.checklist_progress }}%"></i>{% endif %}
+      </a>
+      {% else %}
+      <div class="week-open"><span>Open day</span><small>No planned blocks</small></div>
+      {% endfor %}
+    </div>
+  </article>
+  {% endfor %}
+</section>
+
+{% if deadlines %}
+<section class="deadline-band">
+  <div class="section-heading"><div><span>DEADLINE RADAR</span><h2>Due this week</h2></div><a class="text-link" href="/assignments">Open inbox</a></div>
+  <div class="deadline-row">
+    {% for assignment in deadlines %}
+    <a href="/assignments#assignment-{{ assignment.id }}" class="deadline-ticket">
+      <span>{{ assignment.course_code|default('COURSE') }}</span>
+      <strong>{{ assignment.title }}</strong>
+      <small>Due {{ assignment.due_label }}</small>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

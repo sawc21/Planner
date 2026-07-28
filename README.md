@@ -1,34 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Semester Ops
 
-## Getting Started
+A localhost-first full-day execution tracker built with FastAPI and SQLite. It combines a Today timeline, recurring schedule blocks, completion tracking, basic meal/workout logging, reviewed AI imports through MCP, an assignment Inbox from Blackboard ICS, and a controlled Google Calendar development projection.
 
-First, run the development server:
+The implementation contract is in [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Development quickstart
+
+The bundled scripts create the environment, install the locked dependencies, migrate SQLite, and
+start the loopback-only server:
+
+```powershell
+.\scripts\bootstrap.ps1
+.\scripts\dev.ps1
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Or run the same steps manually:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```powershell
+py -m venv .venv
+.venv\Scripts\python -m pip install uv
+.venv\Scripts\uv sync --locked --extra dev
+.venv\Scripts\python -m alembic upgrade head
+.venv\Scripts\python -m semester_ops.web.main
+```
 
-## Learn More
+Open `http://127.0.0.1:8000`.
 
-To learn more about Next.js, take a look at the following resources:
+Run the local MCP server with:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```powershell
+.venv\Scripts\python -m semester_ops.mcp_server
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The repository's `.codex/config.toml` registers that STDIO server for Codex. After bootstrapping,
+attach schedule documents and invoke `$semester-ops-import`; it retrieves the live contract and
+creates a draft that can only be applied from the Imports screen. See
+[`docs/import-contract.md`](docs/import-contract.md) for the boundary and review flow.
 
-## Deploy on Vercel
+Google Calendar and Blackboard setup are optional. The application runs without either connector and reports them as unconfigured. `uv.lock` pins the complete cross-platform dependency graph.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+To connect Google Calendar after adding the desktop OAuth client file, run the one-time setup
+command. It opens Google's localhost consent flow, creates only `Semester Ops - Dev`, and saves
+the opaque calendar ID in SQLite without printing it:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```powershell
+.venv\Scripts\semester-ops-google-setup.exe
+```
+
+See [`docs/setup-google.md`](docs/setup-google.md) for the Cloud Console and safety details.
+For assignments, paste Blackboard's private read-only ICS subscription in Settings; see
+[`docs/setup-blackboard.md`](docs/setup-blackboard.md).
+
+## Safety boundaries
+
+- SQLite is the source of truth.
+- AI/MCP writes only reviewable drafts.
+- Google synchronization is manual and limited to an explicitly app-created `Semester Ops - Dev` calendar.
+- Blackboard is read-only.
+- External credentials and runtime data stay under ignored local paths.

@@ -1,0 +1,148 @@
+{% macro block_card(block, csrf_token, return_to) %}
+<article class="timeline-block category-{{ block.category|default('custom') }} status-{{ block.status|default('planned') }} {% if block.is_current %}is-current{% endif %} {% if block.conflict %}has-conflict{% endif %}" data-block-id="{{ block.id }}">
+  <div class="block-rail">
+    <span class="block-time">{{ block.start_local|time }}</span>
+    <span class="block-duration">{{ block.duration_minutes|duration }}</span>
+  </div>
+
+  <div class="block-body">
+    <header class="block-header">
+      <div>
+        <div class="block-kicker">
+          <span class="category-dot"></span>
+          {{ block.category_label|default(block.category|default('Block')) }}
+          <span class="flexibility-tag">{{ block.flexibility|default('flexible') }}</span>
+          {% if block.unsynced %}<span class="unsynced-tag">Local change</span>{% endif %}
+        </div>
+        <h3>{{ block.title }}</h3>
+        <p class="block-range">{{ block.start_local|time }} - {{ block.end_local|time }}{% if block.location %} <span>/</span> {{ block.location }}{% endif %}</p>
+      </div>
+      <div class="block-state" title="Block status">
+        <i></i>{{ block.status_label|default(block.status|default('planned')|replace('_', ' ')|title) }}
+      </div>
+    </header>
+
+    {% if block.conflict %}
+    <div class="inline-alert">
+      <strong>Timing conflict</strong>
+      <span>{{ block.conflict_message|default('This block overlaps another commitment.') }}</span>
+    </div>
+    {% endif %}
+
+    {% if block.notes %}<p class="block-note">{{ block.notes }}</p>{% endif %}
+
+    {% if block.checklist_items %}
+    <div class="task-list" aria-label="Checklist">
+      {% for item in block.checklist_items %}
+      <form method="post" action="/checklist-items/{{ item.id }}" class="check-row" data-autosubmit>
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <input type="hidden" name="return_to" value="{{ return_to }}">
+        <label>
+          <input type="checkbox" name="completed" value="true" {% if item.completed %}checked{% endif %}>
+          <span class="check-box" aria-hidden="true"></span>
+          <span class="check-copy {% if item.completed %}is-done{% endif %}">{{ item.label }}</span>
+          {% if not item.required %}<em>optional</em>{% endif %}
+        </label>
+      </form>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if block.meal_items %}
+    <section class="detail-panel meal-panel">
+      <div class="detail-heading">
+        <span>Meal check</span>
+        <strong>{{ block.meal_summary.consumed_calories|default(0) }} / {{ block.meal_summary.planned_calories|default(0) }} kcal</strong>
+      </div>
+      {% for item in block.meal_items %}
+      <form method="post" action="/meal-items/{{ item.id }}" class="food-row">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <input type="hidden" name="return_to" value="{{ return_to }}">
+        <label>
+          <input type="checkbox" name="completed" value="true" {% if item.completed %}checked{% endif %}>
+          <span class="check-box" aria-hidden="true"></span>
+          <span><b>{{ item.name }}</b><small>{{ item.calories|default(0) }} kcal / {{ item.protein_grams|default(0) }}g protein</small></span>
+        </label>
+        <div class="quantity-edit">
+          <input aria-label="Consumed quantity for {{ item.name }}" type="number" min="0.01" step="0.01" name="consumed_quantity" value="{{ item.consumed_quantity|default(item.planned_quantity|default(1)) }}">
+          <span>{{ item.unit|default('serving') }}</span>
+          <button type="submit">Save</button>
+        </div>
+      </form>
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    {% if block.workout_exercises %}
+    <section class="detail-panel workout-panel">
+      <div class="detail-heading">
+        <span>Training log</span>
+        <strong>{{ block.workout_summary.completed_sets|default(0) }} / {{ block.workout_summary.total_sets|default(0) }} sets</strong>
+      </div>
+      {% for exercise in block.workout_exercises %}
+      <div class="exercise-group">
+        <h4>{{ exercise.name }} <small>{{ exercise.rep_target|default('') }}</small></h4>
+        <div class="set-grid">
+          {% for set in exercise.sets %}
+          <form method="post" action="/workout-sets/{{ set.id }}" class="set-chip {% if set.completed %}is-done{% endif %}">
+            <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="return_to" value="{{ return_to }}">
+            <label>
+              <input type="checkbox" name="completed" value="true" {% if set.completed %}checked{% endif %}>
+              <span>Set {{ loop.index }}</span>
+            </label>
+            <input aria-label="Actual reps" name="actual_reps" type="number" min="0" placeholder="reps" value="{{ set.actual_reps|default('', true) }}">
+            <input aria-label="Actual weight" name="actual_weight" type="number" min="0" step="0.5" placeholder="wt" value="{{ set.actual_weight|default('', true) }}">
+            <button type="submit">Log</button>
+          </form>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    <footer class="block-footer">
+      <div class="block-actions">
+        {% if block.status in ['planned', 'missed'] %}
+        <form method="post" action="/blocks/{{ block.id }}/status">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}"><input type="hidden" name="return_to" value="{{ return_to }}"><input type="hidden" name="action" value="start">
+          <button class="button button-primary button-small" type="submit">Start</button>
+        </form>
+        <form method="post" action="/blocks/{{ block.id }}/status">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}"><input type="hidden" name="return_to" value="{{ return_to }}"><input type="hidden" name="action" value="complete">
+          <button class="button button-secondary button-small" type="submit">Complete</button>
+        </form>
+        <form method="post" action="/blocks/{{ block.id }}/status">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}"><input type="hidden" name="return_to" value="{{ return_to }}"><input type="hidden" name="action" value="skip">
+          <button class="text-button" type="submit">Skip</button>
+        </form>
+        {% elif block.status == 'in_progress' %}
+        <form method="post" action="/blocks/{{ block.id }}/status">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}"><input type="hidden" name="return_to" value="{{ return_to }}"><input type="hidden" name="action" value="complete">
+          <button class="button button-primary button-small" type="submit">Finish block</button>
+        </form>
+        {% else %}
+        <form method="post" action="/blocks/{{ block.id }}/status">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}"><input type="hidden" name="return_to" value="{{ return_to }}"><input type="hidden" name="action" value="reopen">
+          <button class="button button-secondary button-small" type="submit">Reopen</button>
+        </form>
+        {% endif %}
+      </div>
+      <div class="block-tools">
+        {% if block.flexibility != 'fixed' %}
+        <form method="post" action="/blocks/{{ block.id }}/move">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}"><input type="hidden" name="return_to" value="{{ return_to }}"><input type="hidden" name="minutes" value="-15">
+          <button class="icon-button" type="submit" title="Move 15 minutes earlier" aria-label="Move 15 minutes earlier">-15</button>
+        </form>
+        <form method="post" action="/blocks/{{ block.id }}/move">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}"><input type="hidden" name="return_to" value="{{ return_to }}"><input type="hidden" name="minutes" value="15">
+          <button class="icon-button" type="submit" title="Move 15 minutes later" aria-label="Move 15 minutes later">+15</button>
+        </form>
+        {% endif %}
+        <a class="text-link" href="/blocks/{{ block.id }}/edit?return_to={{ return_to|urlencode }}">Edit</a>
+      </div>
+    </footer>
+  </div>
+</article>
+{% endmacro %}

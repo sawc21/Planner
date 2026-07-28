@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% set page_title = "Import review" %}
+{% set page_id = "import-detail" %}
+{% set section_label = "DRAFT / " ~ draft.id|default('UNKNOWN') %}
+{% set page_heading = draft.title|default(draft.source_filename|default("Review proposed changes")) %}
+{% set page_subtitle = draft.scope_label|default("Verify every affected date before applying.") %}
+
+{% block header_actions %}
+<a href="/imports" class="button button-quiet">Back to queue</a>
+{% endblock %}
+
+{% block content %}
+<section class="review-banner status-{{ draft.status|default('pending') }}">
+  <div><span>MODE</span><strong>{{ draft.mode|default('patch')|replace('_', ' ')|title }}</strong><small>{{ draft.managed_dataset|default('schedule') }}</small></div>
+  <div><span>SCOPE</span><strong>{{ draft.start_date|default('?') }} - {{ draft.end_date|default('?') }}</strong><small>{{ draft.timezone|default('America/Chicago') }}</small></div>
+  <div><span>BASE REVISION</span><strong>{{ draft.base_revision|default(0) }}</strong><small>current {{ draft.current_revision|default(0) }}</small></div>
+  <div><span>STATUS</span><strong>{{ draft.status|default('pending')|replace('_', ' ')|title }}</strong><small>{{ draft.created_at|day }}</small></div>
+</section>
+
+{% if draft.is_stale %}
+<div class="blocking-alert"><strong>Schedule changed after this draft was created.</strong><p>Generate a fresh proposal against revision {{ draft.current_revision }}. A stale draft cannot be approved.</p></div>
+{% endif %}
+
+{% if issues %}
+<section class="review-section">
+  <div class="section-heading"><div><span>VALIDATION</span><h2>Assumptions and findings</h2></div><span class="issue-count">{{ issues|length }} item{% if issues|length != 1 %}s{% endif %}</span></div>
+  <div class="issue-list">
+    {% for issue in issues %}
+    <article class="issue severity-{{ issue.severity|default('warning') }}">
+      <span>{{ issue.severity|default('warning') }}</span>
+      <div><strong>{{ issue.title|default(issue.code|default('Review finding')) }}</strong><p>{{ issue.message }}</p>{% if issue.path %}<code>{{ issue.path }}</code>{% endif %}</div>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="review-section">
+  <div class="section-heading"><div><span>SCHEDULE DIFF</span><h2>Proposed changes</h2></div><div class="diff-key"><span class="key-add">Add</span><span class="key-change">Change</span><span class="key-cancel">Cancel</span></div></div>
+  <div class="change-list">
+    {% for change in changes %}
+    <article class="change-row operation-{{ change.operation|default('update') }}">
+      <div class="operation-mark">{% if change.operation == 'add' %}+{% elif change.operation in ['cancel', 'delete'] %}-{% else %}~{% endif %}</div>
+      <div class="change-time"><span>{{ change.date_label|default(change.date|default('')) }}</span><strong>{{ change.start_local|time }}</strong><small>{{ change.end_local|time }}</small></div>
+      <div class="change-copy">
+        <span>{{ change.category|default('block') }} / {{ change.flexibility|default('flexible') }}</span>
+        <h3>{{ change.title }}</h3>
+        {% if change.before %}<p><del>{{ change.before }}</del></p>{% endif %}
+        {% if change.after %}<p><ins>{{ change.after }}</ins></p>{% endif %}
+        {% if change.conflict %}<div class="mini-warning">Overlaps {{ change.conflict_with|default('another block') }}</div>{% endif %}
+      </div>
+      <div class="change-source">{{ change.source_label|default('AI proposal') }}</div>
+    </article>
+    {% else %}
+    <div class="empty-state compact"><h2>No computed changes</h2><p>This draft has nothing to apply.</p></div>
+    {% endfor %}
+  </div>
+</section>
+
+{% if draft.status|default('pending') in ['pending', 'ready', 'blocked'] %}
+<section class="approval-dock">
+  <div><span>FINAL CHECK</span><strong>{{ error_count|default(0) }} blocking errors / {{ warning_count|default(0) }} warnings</strong><p>Applying is atomic. If any operation fails, none of the draft changes reach the live schedule.</p></div>
+  <div class="approval-actions">
+    <form method="post" action="/imports/{{ draft.id }}/reject">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <button class="button button-quiet" type="submit">Reject draft</button>
+    </form>
+    <form method="post" action="/imports/{{ draft.id }}/approve" class="approve-form">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      {% if warning_count|default(0) %}<label><input type="checkbox" name="allow_warnings" value="true"><span class="check-box"></span>I reviewed the warnings</label>{% endif %}
+      <button class="button button-primary" type="submit" {% if error_count|default(0) or draft.is_stale %}disabled{% endif %}>Apply {{ changes|length }} changes</button>
+    </form>
+  </div>
+</section>
+{% endif %}
+
+<details class="payload-inspector">
+  <summary>Submitted payload and provenance</summary>
+  <div class="payload-grid">
+    <dl><dt>Source</dt><dd>{{ draft.source_filename|default('MCP') }}</dd><dt>Hash</dt><dd><code>{{ draft.source_hash|default('not supplied') }}</code></dd><dt>Idempotency key</dt><dd><code>{{ draft.idempotency_key|default('not supplied') }}</code></dd></dl>
+    <pre>{{ payload_json|default('{}') }}</pre>
+  </div>
+</details>
+{% endblock %}

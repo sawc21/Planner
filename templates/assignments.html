@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% set page_title = "Assignments" %}
+{% set page_id = "assignments" %}
+{% set section_label = "BLACKBOARD INBOX" %}
+{% set page_heading = "Work before it becomes urgent" %}
+{% set page_subtitle = "Deadlines arrive read-only. Study time enters your day only through a reviewed plan." %}
+
+{% block content %}
+<section class="assignment-overview">
+  <article><span>INBOX</span><strong>{{ counts.inbox|default(0) }}</strong><small>not planned</small></article>
+  <article><span>PLANNED</span><strong>{{ counts.planned|default(0) }}</strong><small>study blocks linked</small></article>
+  <article><span>DUE SOON</span><strong>{{ counts.due_soon|default(0) }}</strong><small>next 72 hours</small></article>
+  <article class="source-health {% if source.status|default('unconfigured') == 'connected' %}is-connected{% endif %}"><span>SOURCE</span><strong>{{ source.label|default('Not configured') }}</strong><small>{% if source.last_refreshed_at %}Refreshed {{ source.last_refreshed_at|time }}{% else %}Blackboard ICS{% endif %}</small></article>
+</section>
+
+<div class="filter-bar" aria-label="Assignment filters">
+  <a href="/assignments" class="{% if not active_state %}is-active{% endif %}">Open</a>
+  {% for state in ['inbox', 'planned', 'completed', 'ignored', 'stale'] %}
+  <a href="/assignments?state={{ state }}" class="{% if active_state == state %}is-active{% endif %}">{{ state|replace('_', ' ')|title }}</a>
+  {% endfor %}
+</div>
+
+<section class="assignment-list">
+  {% for assignment in assignments %}
+  <article class="assignment-card state-{{ assignment.state|default('inbox') }} {% if assignment.urgency == 'overdue' %}is-overdue{% endif %}" id="assignment-{{ assignment.id }}">
+    <div class="course-flag" style="--course-color: {{ assignment.course_color|default('#1d6a5c') }}">
+      <span>{{ assignment.course_code|default('COURSE') }}</span>
+    </div>
+    <div class="assignment-main">
+      <header>
+        <div>
+          <span class="assignment-state">{{ assignment.state|default('inbox')|replace('_', ' ') }}</span>
+          <h2>{{ assignment.title }}</h2>
+          <p>{{ assignment.course_name|default('Unassigned course') }}</p>
+        </div>
+        <div class="due-stamp urgency-{{ assignment.urgency|default('normal') }}">
+          <span>DUE</span><strong>{{ assignment.due_day|default('TBD') }}</strong><small>{{ assignment.due_time|default('') }}</small>
+        </div>
+      </header>
+      {% if assignment.source_changed %}<div class="inline-alert"><strong>Deadline changed</strong><span>Review linked study blocks before the new due date.</span></div>{% endif %}
+      <div class="assignment-meta">
+        <span>{{ assignment.estimated_minutes|default(0)|duration }} estimated</span>
+        <span>{{ assignment.linked_block_count|default(0) }} study block{% if assignment.linked_block_count|default(0) != 1 %}s{% endif %}</span>
+        {% if assignment.source_url %}<a href="{{ assignment.source_url }}" target="_blank" rel="noreferrer">Open Blackboard</a>{% endif %}
+      </div>
+      {% if assignment.linked_blocks %}
+      <div class="linked-blocks">
+        {% for block in assignment.linked_blocks %}<a href="/blocks/{{ block.id }}/edit">{{ block.date_label }} / {{ block.time_label }}</a>{% endfor %}
+      </div>
+      {% endif %}
+      <form method="post" action="/assignments/{{ assignment.id }}/state" class="assignment-actions">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <input type="hidden" name="return_to" value="{{ request.url.path }}{% if active_state %}?state={{ active_state }}{% endif %}">
+        <label>Effort <input type="number" name="estimated_minutes" min="1" step="15" value="{{ assignment.estimated_minutes|default(60) }}"><span>min</span></label>
+        <button class="button button-secondary button-small" name="state" value="planned" type="submit">Mark planned</button>
+        <button class="button button-primary button-small" name="state" value="completed" type="submit">Complete</button>
+        <button class="text-button" name="state" value="ignored" type="submit">Ignore</button>
+      </form>
+    </div>
+  </article>
+  {% else %}
+  <div class="empty-state">
+    <span class="empty-index">0</span><h2>Inbox clear</h2>
+    <p>No assignments match this view. Sync Blackboard from Settings when you want to refresh the feed.</p>
+  </div>
+  {% endfor %}
+</section>
+
+<aside class="ai-callout">
+  <span class="ai-number">AI / 01</span>
+  <div><strong>Want a study plan?</strong><p>Ask Codex to read your assignment inbox and open schedule, then submit a planning draft through MCP. Nothing goes live until you approve it.</p></div>
+  <a class="button button-ink" href="/imports">Review proposals</a>
+</aside>
+{% endblock %}

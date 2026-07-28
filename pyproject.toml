@@ -1,0 +1,72 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "semester-ops"
+version = "0.1.0"
+description = "Local-first full-day semester execution tracker"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "alembic>=1.14,<2",
+  "fastapi>=0.115,<1",
+  "google-api-python-client>=2.160,<3",
+  "google-auth-oauthlib>=1.2,<2",
+  "httpx>=0.28,<1",
+  "icalendar>=6,<7",
+  "itsdangerous>=2.2,<3",
+  "jinja2>=3.1,<4",
+  "mcp>=1.20,<2",
+  "pydantic-settings>=2.7,<3",
+  "python-dateutil>=2.9,<3",
+  "python-multipart>=0.0.18,<1",
+  "sqlalchemy>=2.0,<3",
+  "uvicorn[standard]>=0.34,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.14,<2",
+  "pytest>=8.3,<10",
+  "pytest-cov>=6,<8",
+  "ruff>=0.9,<1",
+  "types-python-dateutil>=2.9",
+]
+
+[project.scripts]
+semester-ops = "semester_ops.web.main:run"
+semester-ops-google-setup = "semester_ops.cli.google_setup:main"
+semester-ops-mcp = "semester_ops.mcp_server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/semester_ops"]
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers"
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [".venv", "var", "output"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["B008"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["semester_ops"]
+warn_unused_ignores = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = [
+  "googleapiclient.*",
+  "google_auth_oauthlib.*",
+  "icalendar.*",
+]
+ignore_missing_imports = true

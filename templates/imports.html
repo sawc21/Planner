@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% set page_title = "Imports" %}
+{% set page_id = "imports" %}
+{% set section_label = "REVIEW GATE" %}
+{% set page_heading = "Nothing changes by surprise" %}
+{% set page_subtitle = "AI proposals stop here until the scope, assumptions, and schedule diff make sense to you." %}
+
+{% block content %}
+<section class="import-flow" aria-label="Import workflow">
+  <div><span>01</span><strong>Attach to AI</strong><small>PDF, DOCX, text, or HTML</small></div>
+  <i></i>
+  <div><span>02</span><strong>Submit draft</strong><small>Strict MCP JSON contract</small></div>
+  <i></i>
+  <div class="is-active"><span>03</span><strong>Review here</strong><small>Diff, correct source, approve</small></div>
+  <i></i>
+  <div><span>04</span><strong>Apply atomically</strong><small>SQLite becomes canonical</small></div>
+</section>
+
+<div class="section-heading import-heading">
+  <div><span>PENDING QUEUE</span><h2>{{ counts.pending|default(0) }} draft{% if counts.pending|default(0) != 1 %}s{% endif %} awaiting review</h2></div>
+  <div class="import-totals"><span>{{ counts.applied|default(0) }} applied</span><span>{{ counts.rejected|default(0) }} rejected</span></div>
+</div>
+
+<section class="draft-list">
+  {% for draft in drafts %}
+  <a class="draft-card status-{{ draft.status|default('pending') }}" href="/imports/{{ draft.id }}">
+    <div class="draft-status"><i></i>{{ draft.status|default('pending')|replace('_', ' ') }}</div>
+    <div class="draft-copy">
+      <span>{{ draft.mode|default('patch')|replace('_', ' ') }} / {{ draft.managed_dataset|default('schedule') }}</span>
+      <h2>{{ draft.title|default(draft.source_filename|default('Untitled import')) }}</h2>
+      <p>{{ draft.scope_label|default('Bounded schedule change') }}</p>
+      <div class="draft-meta"><span>{{ draft.created_at|day }}</span><span>rev {{ draft.base_revision|default(0) }}</span><span>{{ draft.source_filename|default('MCP submission') }}</span></div>
+    </div>
+    <div class="diff-counts">
+      <span class="diff-add">+{{ draft.add_count|default(0) }}<small>add</small></span>
+      <span class="diff-change">~{{ draft.change_count|default(0) }}<small>change</small></span>
+      <span class="diff-remove">-{{ draft.cancel_count|default(0) }}<small>cancel</small></span>
+      {% if draft.error_count|default(0) %}<span class="diff-error">!{{ draft.error_count }}<small>errors</small></span>{% endif %}
+    </div>
+    <span class="draft-arrow" aria-hidden="true">View</span>
+  </a>
+  {% else %}
+  <div class="empty-state">
+    <span class="empty-index">JSON</span><h2>No import drafts yet</h2>
+    <p>Attach your schedule document to Codex. It can call the local Semester Ops MCP server and place a safe proposal here.</p>
+  </div>
+  {% endfor %}
+</section>
+
+<details class="contract-note">
+  <summary>What the AI is allowed to do</summary>
+  <div><p>MCP can read planning context and create idempotent, bounded drafts. It cannot approve a draft, mutate your live schedule, resolve a sync conflict, or trigger Google Calendar.</p><code>AI -> JSON draft -> your review -> SQLite</code></div>
+</details>
+{% endblock %}
