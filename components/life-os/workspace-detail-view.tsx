@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { BookOpen, Files, Flag, GraduationCap, ListTodo, Sparkles } from "lucide-react";
+import { BookOpen, Files, Flag, GraduationCap, ListTodo, Sparkles, X } from "lucide-react";
 
 import { BuddyPanel } from "@/components/life-os/buddy-panel";
 import { EmptyState } from "@/components/life-os/empty-state";
@@ -9,7 +9,8 @@ import { EventCard } from "@/components/life-os/event-card";
 import { LifeItemCard } from "@/components/life-os/life-item-card";
 import { PageHeader } from "@/components/life-os/page-header";
 import { WorkspaceIcon } from "@/components/life-os/workspace-icon";
-import { buttonVariants } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getBuddyInsight, getConstraintAwarePlan, getWorkspaceBundle } from "@/lib/life-os/selectors";
@@ -26,10 +27,13 @@ export function WorkspaceDetailView({ workspaceId }: { workspaceId: string }) {
     gradebooks,
     constraintProfile,
     focusTodayIds,
+    focusedWorkspaceId,
     toggleFocusToday,
     completeTask,
     moveTaskToTomorrow,
     startTask,
+    focusWorkspace,
+    runCommand,
   } = useLifeOs();
 
   const snapshot = {
@@ -56,6 +60,7 @@ export function WorkspaceDetailView({ workspaceId }: { workspaceId: string }) {
   const insight = getBuddyInsight(snapshot, workspaceId);
   const plan = getConstraintAwarePlan({ workspaces, tasks, constraintProfile }, workspaceId);
   const isCourse = bundle.workspace.kind === "course";
+  const isFocused = focusedWorkspaceId === workspaceId;
 
   return (
     <div className="space-y-6">
@@ -63,6 +68,34 @@ export function WorkspaceDetailView({ workspaceId }: { workspaceId: string }) {
         eyebrow="Workspace"
         title={bundle.workspace.name}
         description={`${bundle.workspace.shortLabel} · ${bundle.workspace.ownerLabel} · ${bundle.workspace.progressSummary}`}
+        actions={
+          isFocused ? (
+            <div
+              data-testid="workspace-focused-banner"
+              className="inline-flex items-center gap-2 rounded-full border hairline bg-emerald-400/10 px-3 py-1 text-[11px] text-foreground"
+            >
+              <Badge
+                variant="outline"
+                className="rounded-full border-emerald-300/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] text-emerald-100"
+              >
+                Focused by assistant
+              </Badge>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-6 rounded-full px-2 text-[11px]"
+                onClick={() => {
+                  focusWorkspace(null);
+                  runCommand("clear focus");
+                }}
+              >
+                <X className="size-3.5" />
+                Clear focus
+              </Button>
+            </div>
+          ) : undefined
+        }
       />
 
       <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_340px]">

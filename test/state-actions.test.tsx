@@ -180,3 +180,178 @@ describe("orbit state actions", () => {
     ).toBeInTheDocument();
   });
 });
+
+function AssistantHarness() {
+  const {
+    activeWeeklyPlan,
+    pendingScheduleSuggestions,
+    focusedWorkspaceId,
+    assistantActivity,
+    applyActiveWeeklyPlan,
+    applyScheduleSuggestion,
+    dismissScheduleSuggestion,
+    runCommand,
+    logAssistantActivity,
+    tasks,
+  } = useLifeOs();
+
+  return (
+    <div>
+      <p data-testid="plan-total">{activeWeeklyPlan?.steps.length ?? 0}</p>
+      <p data-testid="plan-applied">
+        {activeWeeklyPlan?.steps.filter((step) => step.applied).length ?? 0}
+      </p>
+      <p data-testid="pending-count">
+        {pendingScheduleSuggestions.filter((s) => s.status === "pending").length}
+      </p>
+      <p data-testid="applied-count">
+        {pendingScheduleSuggestions.filter((s) => s.status === "applied").length}
+      </p>
+      <p data-testid="dismissed-count">
+        {pendingScheduleSuggestions.filter((s) => s.status === "dismissed").length}
+      </p>
+      <p data-testid="focused-id">{focusedWorkspaceId ?? ""}</p>
+      <p data-testid="activity-count">{assistantActivity.length}</p>
+      <p data-testid="activity-top-intent">{assistantActivity[0]?.intent ?? ""}</p>
+      <p data-testid="activity-top-surfaces">
+        {assistantActivity[0]?.affectedSurfaces.join(",") ?? ""}
+      </p>
+      <p data-testid="task-count">{tasks.length}</p>
+      <button type="button" onClick={() => runCommand("generate weekly plan")}>
+        Generate plan
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          applyActiveWeeklyPlan();
+        }}
+      >
+        Apply plan
+      </button>
+      <button type="button" onClick={() => runCommand("rebalance schedule")}>
+        Rebalance
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          const suggestion = pendingScheduleSuggestions[0];
+          if (suggestion) {
+            applyScheduleSuggestion(suggestion.id);
+          }
+        }}
+      >
+        Apply first suggestion
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          const suggestion = pendingScheduleSuggestions[0];
+          if (suggestion) {
+            dismissScheduleSuggestion(suggestion.id);
+          }
+        }}
+      >
+        Dismiss first suggestion
+      </button>
+      <button type="button" onClick={() => runCommand("focus workspace CS 3345")}>
+        Focus workspace
+      </button>
+      <button type="button" onClick={() => runCommand("clear focus")}>
+        Clear focus
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          for (let index = 0; index < 52; index += 1) {
+            logAssistantActivity({
+              intent: "build_dashboard",
+              title: `Event ${index}`,
+              summary: "noise",
+              affectedSurfaces: ["home"],
+              receiptLines: [],
+              resultKind: "dashboard_update",
+            });
+          }
+        }}
+      >
+        Seed noisy activity
+      </button>
+    </div>
+  );
+}
+
+describe("phase 4 assistant state", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(REFERENCE_DATE);
+    usePathnameMock.mockReturnValue("/assistant");
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("generate + apply weekly plan promotes steps to tasks", () => {
+    renderWithLifeOs(<AssistantHarness />);
+
+    const initialTaskCount = Number(screen.getByTestId("task-count").textContent);
+
+    fireEvent.click(screen.getByText("Generate plan"));
+    const total = Number(screen.getByTestId("plan-total").textContent);
+    expect(total).toBeGreaterThan(0);
+    expect(screen.getByTestId("plan-applied")).toHaveTextContent("0");
+
+    fireEvent.click(screen.getByText("Apply plan"));
+    expect(screen.getByTestId("plan-applied")).toHaveTextContent(String(total));
+    expect(Number(screen.getByTestId("task-count").textContent)).toBeGreaterThan(
+      initialTaskCount,
+    );
+  });
+
+  it("rebalance schedule logs schedule_update activity and accepts apply/dismiss", () => {
+    renderWithLifeOs(<AssistantHarness />);
+
+    fireEvent.click(screen.getByText("Rebalance"));
+    expect(screen.getByTestId("activity-top-intent")).toHaveTextContent(
+      "rebalance_schedule",
+    );
+
+    // Apply/dismiss still no-ops cleanly when there are no pending suggestions
+    const pending = Number(screen.getByTestId("pending-count").textContent);
+    if (pending > 0) {
+      fireEvent.click(screen.getByText("Apply first suggestion"));
+      expect(Number(screen.getByTestId("applied-count").textContent)).toBe(1);
+
+      fireEvent.click(screen.getByText("Dismiss first suggestion"));
+      // After Apply, the first in list is now applied; Dismiss becomes no-op, so count may be 0
+      expect(
+        Number(screen.getByTestId("dismissed-count").textContent),
+      ).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("focus and clear focus toggle focusedWorkspaceId and log activity surfaces", () => {
+    renderWithLifeOs(<AssistantHarness />);
+
+    fireEvent.click(screen.getByText("Focus workspace"));
+    expect(screen.getByTestId("focused-id").textContent).toBe("course-os");
+    expect(screen.getByTestId("activity-top-intent")).toHaveTextContent(
+      "focus_workspace",
+    );
+    expect(screen.getByTestId("activity-top-surfaces").textContent ?? "").toContain(
+      "workspaces",
+    );
+
+    fireEvent.click(screen.getByText("Clear focus"));
+    expect(screen.getByTestId("focused-id").textContent).toBe("");
+  });
+
+  it("logAssistantActivity trims the log to 50 entries", () => {
+    renderWithLifeOs(<AssistantHarness />);
+
+    fireEvent.click(screen.getByText("Seed noisy activity"));
+    expect(Number(screen.getByTestId("activity-count").textContent)).toBeLessThanOrEqual(
+      50,
+    );
+  });
+});

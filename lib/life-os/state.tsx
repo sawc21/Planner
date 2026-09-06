@@ -1,38 +1,51 @@
-﻿"use client";
+"use client";
 
 import { addDays, parseISO, set } from "date-fns";
 import { createContext, useContext, useState } from "react";
 
 import {
+  buildApplyPlanCommandResult,
   buildDashboardCommandResult,
-  buildExplanationResult,
+  buildFocusNotFoundResult,
   buildPlanCommandResult,
+  buildPriorityExplanationResult,
   buildRecommendationCommandResult,
+  buildScheduleUpdateResult,
+  buildWorkspaceFocusResult,
+  INTENT_AFFECTED_SURFACES,
   parseCommandInput,
 } from "@/lib/life-os/commands";
 import { seedLifeOsData } from "@/lib/life-os/mock-data";
 import {
+  buildActiveWeeklyPlan,
+  computeScheduleRebalance,
   getAtRiskWorkspaces,
-  getConstraintAwarePlan,
   getHomeWidgetData,
   getTodayRecommendations,
   getWorkspaceBundle,
 } from "@/lib/life-os/selectors";
 import type {
+  ActiveWeeklyPlan,
   AddEventInput,
   AddMaterialInput,
   AddTaskInput,
+  AssistantActivityEvent,
+  CommandIntent,
   CommandResult,
   CreateProjectMilestoneInput,
   CreateWorkspaceInput,
   DashboardWidget,
+  DashboardWidgetKind,
   Event,
   LifeOsSnapshot,
   ProjectMilestone,
+  ScheduleSuggestion,
   StudyMaterial,
   Task,
   Workspace,
 } from "@/lib/life-os/types";
+
+type LogActivityInput = Omit<AssistantActivityEvent, "id" | "at" | "read">;
 
 type LifeOsContextValue = LifeOsSnapshot & {
   focusTodayIds: string[];
@@ -40,6 +53,9 @@ type LifeOsContextValue = LifeOsSnapshot & {
   commandPanelOpen: boolean;
   lastCommandResult: CommandResult | null;
   commandHistory: CommandResult[];
+  activeWeeklyPlan: ActiveWeeklyPlan | null;
+  pendingScheduleSuggestions: ScheduleSuggestion[];
+  assistantActivity: AssistantActivityEvent[];
   completeTask: (taskId: string) => void;
   startTask: (taskId: string) => void;
   moveTaskToTomorrow: (taskId: string) => void;
@@ -55,6 +71,14 @@ type LifeOsContextValue = LifeOsSnapshot & {
   closeCommandPanel: () => void;
   clearCommandResult: () => void;
   runCommand: (input: string) => CommandResult;
+  setActiveWeeklyPlan: (plan: ActiveWeeklyPlan | null) => void;
+  applyActiveWeeklyPlan: () => { applied: number };
+  applyScheduleSuggestion: (id: string) => void;
+  dismissScheduleSuggestion: (id: string) => void;
+  clearScheduleSuggestions: () => void;
+  logAssistantActivity: (event: LogActivityInput) => AssistantActivityEvent;
+  markActivityRead: (id: string) => void;
+  clearActivity: () => void;
 };
 
 const LifeOsContext = createContext<LifeOsContextValue | null>(null);
@@ -243,6 +267,11 @@ export function LifeOsProvider({
   const [commandPanelOpen, setCommandPanelOpen] = useState(false);
   const [lastCommandResult, setLastCommandResult] = useState<CommandResult | null>(null);
   const [commandHistory, setCommandHistory] = useState<CommandResult[]>([]);
+  const [activeWeeklyPlan, setActiveWeeklyPlanState] = useState<ActiveWeeklyPlan | null>(null);
+  const [pendingScheduleSuggestions, setPendingScheduleSuggestions] = useState<
+    ScheduleSuggestion[]
+  >([]);
+  const [assistantActivity, setAssistantActivity] = useState<AssistantActivityEvent[]>([]);
 
   const snapshot: LifeOsSnapshot = {
     workspaces,
@@ -255,12 +284,157 @@ export function LifeOsProvider({
     constraintProfile,
   };
 
+  const activityIdRef = () => `activity-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const logAssistantActivity = (input: LogActivityInput) => {
+    const entry: AssistantActivityEvent = {
+      id: activityIdRef(),
+      at: new Date().toISOString(),
+      read: false,
+      ...input,
+    };
+    setAssistantActivity((current) => [entry, ...current].slice(0, 50));
+    return entry;
+  };
+
+  const markActivityRead = (id: string) => {
+    setAssistantActivity((current) =>
+      current.map((entry) => (entry.id === id ? { ...entry, read: true } : entry)),
+    );
+  };
+
+  const clearActivity = () => {
+    setAssistantActivity([]);
+  };
+
+  const setActiveWeeklyPlan = (plan: ActiveWeeklyPlan | null) => {
+    setActiveWeeklyPlanState(plan);
+  };
+
+  const applyActiveWeeklyPlan = () => {
+    if (!activeWeeklyPlan) {
+      return { applied: 0 };
+    }
+
+    let applied = 0;
+    const nowIso = new Date().toISOString();
+    const newTasks: Task[] = [];
+    const updatedSteps = activeWeeklyPlan.steps.map((step) => {
+      if (step.applied) {
+        return step;
+      }
+
+      const newTask: Task = {
+        id: createId("task", step.title),
+        primaryWorkspaceId: step.workspaceId,
+        linkedWorkspaceIds: [],
+        kind: "study_session",
+        title: step.title,
+        notes: step.reason,
+        status: "scheduled",
+        priority: "medium",
+        scheduledAt: step.scheduledFor,
+        tags: ["from-plan"],
+        estimatedMinutes: step.minutes,
+        energy: "medium",
+      };
+      newTasks.push(newTask);
+      applied += 1;
+
+      return {
+        ...step,
+        applied: true,
+        appliedTaskId: newTask.id,
+      };
+    });
+
+    if (newTasks.length) {
+      setTasks((current) => [...newTasks, ...current]);
+    }
+
+    setActiveWeeklyPlanState({
+      ...activeWeeklyPlan,
+      steps: updatedSteps,
+      appliedAt: applied > 0 ? nowIso : activeWeeklyPlan.appliedAt,
+    });
+
+    return { applied };
+  };
+
+  const applyScheduleSuggestion = (id: string) => {
+    const suggestion = pendingScheduleSuggestions.find((entry) => entry.id === id);
+    if (!suggestion || suggestion.status !== "pending") {
+      return;
+    }
+
+    if (suggestion.kind === "shift" || suggestion.kind === "reschedule") {
+      if (suggestion.taskId) {
+        setTasks((current) =>
+          current.map((task) =>
+            task.id === suggestion.taskId
+              ? { ...task, scheduledAt: suggestion.toAt }
+              : task,
+          ),
+        );
+      }
+    } else if (suggestion.kind === "insert") {
+      if (suggestion.taskId) {
+        setTasks((current) =>
+          current.map((task) =>
+            task.id === suggestion.taskId
+              ? { ...task, scheduledAt: suggestion.toAt, status: "scheduled" }
+              : task,
+          ),
+        );
+      }
+    }
+
+    setPendingScheduleSuggestions((current) =>
+      current.map((entry) =>
+        entry.id === id
+          ? { ...entry, status: "applied", appliedAt: new Date().toISOString() }
+          : entry,
+      ),
+    );
+  };
+
+  const dismissScheduleSuggestion = (id: string) => {
+    setPendingScheduleSuggestions((current) =>
+      current.map((entry) =>
+        entry.id === id ? { ...entry, status: "dismissed" } : entry,
+      ),
+    );
+  };
+
+  const clearScheduleSuggestions = () => {
+    setPendingScheduleSuggestions([]);
+  };
+
   const pushResult = (result: CommandResult) => {
     setLastCommandResult(result);
     if (result.kind !== "message") {
       setCommandHistory((current) => [result, ...current].slice(0, 8));
     }
     return result;
+  };
+
+  const logForResult = (
+    intent: CommandIntent,
+    result: CommandResult,
+    title: string,
+    summary: string,
+    href?: string,
+  ) => {
+    logAssistantActivity({
+      intent,
+      title,
+      summary,
+      affectedSurfaces: INTENT_AFFECTED_SURFACES[intent],
+      href,
+      receiptLines:
+        "receipt" in result && result.receipt ? result.receipt.lines : [],
+      resultKind: result.kind,
+    });
   };
 
   const completeTask = (taskId: string) => {
@@ -349,7 +523,7 @@ export function LifeOsProvider({
 
     if (parsed.kind === "add_task") {
       const task = addTask(parsed.input);
-      return pushResult({
+      const result = pushResult({
         intent: parsed.intent,
         kind: "mutation",
         message: parsed.message,
@@ -360,11 +534,13 @@ export function LifeOsProvider({
           href: "/assignments",
         },
       });
+      logForResult(parsed.intent, result, parsed.intent === "create_study_session" ? "Study session created" : "Task created", task.title, "/assignments");
+      return result;
     }
 
     if (parsed.kind === "add_event") {
       const event = addEvent(parsed.input);
-      return pushResult({
+      const result = pushResult({
         intent: parsed.intent,
         kind: "mutation",
         message: parsed.message,
@@ -375,11 +551,13 @@ export function LifeOsProvider({
           href: "/calendar",
         },
       });
+      logForResult(parsed.intent, result, "Event created", event.title, "/calendar");
+      return result;
     }
 
     if (parsed.kind === "add_material") {
       const material = addMaterial(parsed.input);
-      return pushResult({
+      const result = pushResult({
         intent: parsed.intent,
         kind: "mutation",
         message: parsed.message,
@@ -389,11 +567,13 @@ export function LifeOsProvider({
           lines: [material.title, material.summary],
         },
       });
+      logForResult(parsed.intent, result, "Material added", material.title);
+      return result;
     }
 
     if (parsed.kind === "create_workspace") {
       const workspace = createWorkspace(parsed.input);
-      return pushResult({
+      const result = pushResult({
         intent: parsed.intent,
         kind: "mutation",
         message: parsed.message,
@@ -404,69 +584,163 @@ export function LifeOsProvider({
           href: `/workspaces/${workspace.id}`,
         },
       });
+      logForResult(parsed.intent, result, "Project created", workspace.name, `/workspaces/${workspace.id}`);
+      return result;
     }
 
     if (parsed.kind === "recommendation") {
-      return pushResult(buildRecommendationCommandResult(getTodayRecommendations(snapshot).primary));
+      const recommendation = getTodayRecommendations(snapshot).primary;
+      const result = pushResult(buildRecommendationCommandResult(recommendation));
+      logForResult(
+        parsed.intent,
+        result,
+        "Recommendation ready",
+        recommendation ? `Start with ${recommendation.item.title}.` : "Board is calm right now.",
+        "/home",
+      );
+      return result;
     }
 
     if (parsed.kind === "plan") {
-      return pushResult(buildPlanCommandResult(getConstraintAwarePlan(snapshot, focusedWorkspaceId ?? undefined)));
+      const plan = buildActiveWeeklyPlan(snapshot, new Date(), focusedWorkspaceId ?? undefined);
+      setActiveWeeklyPlanState(plan);
+      const result = pushResult(buildPlanCommandResult(plan));
+      logForResult(
+        parsed.intent,
+        result,
+        "Weekly plan ready",
+        `${plan.steps.length} step plan drafted for this week.`,
+        "/assistant",
+      );
+      return result;
+    }
+
+    if (parsed.kind === "apply_plan") {
+      const { applied } = applyActiveWeeklyPlan();
+      const totalSteps = activeWeeklyPlan?.steps.length ?? 0;
+      const result = pushResult(
+        buildApplyPlanCommandResult(applied, totalSteps, activeWeeklyPlan),
+      );
+      logForResult(
+        parsed.intent,
+        result,
+        "Plan applied",
+        activeWeeklyPlan
+          ? `Scheduled ${applied} step${applied === 1 ? "" : "s"} on the calendar.`
+          : "No plan to apply yet.",
+        "/calendar",
+      );
+      return result;
     }
 
     if (parsed.kind === "dashboard") {
+      const previousKinds = new Set<DashboardWidgetKind>(widgets.map((widget) => widget.kind));
       const nextWidgets = buildWidgets(snapshot);
+      const nextKinds = new Set<DashboardWidgetKind>(nextWidgets.map((widget) => widget.kind));
+      const added = [...nextKinds].filter((kind) => !previousKinds.has(kind));
+      const removed = [...previousKinds].filter((kind) => !nextKinds.has(kind));
+
       setWidgetsState(nextWidgets);
-      return pushResult(buildDashboardCommandResult(parsed.intent, nextWidgets));
+      const result = pushResult(
+        buildDashboardCommandResult(parsed.intent, nextWidgets, added, removed),
+      );
+      logForResult(
+        parsed.intent,
+        result,
+        parsed.intent === "build_dashboard" ? "Home rebuilt" : "Widgets suggested",
+        `${nextWidgets.length} widgets pinned to Home.`,
+        "/home",
+      );
+      return result;
     }
 
-    if (parsed.kind === "explanation") {
-      if (parsed.intent === "focus_workspace") {
-        const matchedWorkspace = workspaces.find((workspace) =>
+    if (parsed.kind === "rebalance") {
+      const suggestions = computeScheduleRebalance(snapshot, new Date());
+      setPendingScheduleSuggestions(suggestions);
+      const result = pushResult(buildScheduleUpdateResult(suggestions));
+      logForResult(
+        parsed.intent,
+        result,
+        "Schedule rebalance",
+        suggestions.length
+          ? `${suggestions.length} schedule move${suggestions.length === 1 ? "" : "s"} suggested.`
+          : "Week already balances.",
+        "/calendar",
+      );
+      return result;
+    }
+
+    if (parsed.kind === "focus_workspace") {
+      const matchedWorkspace = workspaces.find(
+        (workspace) =>
           workspace.name.toLowerCase().includes(parsed.target.toLowerCase()) ||
           workspace.shortLabel.toLowerCase().includes(parsed.target.toLowerCase()),
-        );
+      );
 
-        if (!matchedWorkspace) {
-          return pushResult(
-            buildExplanationResult(
-              parsed.intent,
-              "Workspace not found",
-              ["Try a workspace name or short label that exists on the board."],
-            ),
-          );
-        }
-
-        setFocusedWorkspaceId(matchedWorkspace.id);
-        const bundle = getWorkspaceBundle(snapshot, matchedWorkspace.id);
-        return pushResult(
-          buildExplanationResult(
-            parsed.intent,
-            `Focus ${matchedWorkspace.shortLabel}`,
-            [
-              matchedWorkspace.progressSummary,
-              `${bundle?.tasks.length ?? 0} linked tasks and ${bundle?.milestones.length ?? 0} milestones are visible.`,
-            ],
-            `/workspaces/${matchedWorkspace.id}`,
-          ),
+      if (!matchedWorkspace) {
+        const result = pushResult(buildFocusNotFoundResult(parsed.target));
+        logForResult(
+          parsed.intent,
+          result,
+          "Workspace not found",
+          `No workspace matched "${parsed.target}".`,
+          "/workspaces",
         );
+        return result;
       }
 
-      const recommendation = getTodayRecommendations(snapshot).primary;
-      const atRisk = getAtRiskWorkspaces(snapshot, new Date(), 1)[0];
-      return pushResult(
-        buildExplanationResult(
-          parsed.intent,
-          "Why Orbit picked this",
-          recommendation
-            ? [recommendation.reason, recommendation.explanation, atRisk ? atRisk.reason : "No workspace is clearly slipping."]
-            : ["The board is calm enough that no single item is dominating the day."],
-          "/home",
+      setFocusedWorkspaceId(matchedWorkspace.id);
+      const bundle = getWorkspaceBundle(snapshot, matchedWorkspace.id);
+      const result = pushResult(
+        buildWorkspaceFocusResult(
+          matchedWorkspace,
+          bundle?.tasks.length ?? 0,
+          bundle?.milestones.length ?? 0,
         ),
       );
+      logForResult(
+        parsed.intent,
+        result,
+        `Focus ${matchedWorkspace.shortLabel}`,
+        matchedWorkspace.progressSummary,
+        `/workspaces/${matchedWorkspace.id}`,
+      );
+      return result;
     }
 
-    return pushResult({
+    if (parsed.kind === "clear_focus") {
+      setFocusedWorkspaceId(null);
+      const result = pushResult(buildWorkspaceFocusResult(null, 0, 0));
+      logForResult(
+        parsed.intent,
+        result,
+        "Focus cleared",
+        "Home ranking back to default mix.",
+        "/home",
+      );
+      return result;
+    }
+
+    if (parsed.kind === "explain") {
+      const recommendation = getTodayRecommendations(snapshot).primary;
+      const atRisk = getAtRiskWorkspaces(snapshot, new Date(), 1)[0];
+      const result = pushResult(
+        buildPriorityExplanationResult(recommendation, atRisk?.reason),
+      );
+      logForResult(
+        parsed.intent,
+        result,
+        "Why Orbit picked this",
+        recommendation
+          ? `Chose ${recommendation.item.title}.`
+          : "Board is calm right now.",
+        "/home",
+      );
+      return result;
+    }
+
+    // Navigation (show_urgent_items)
+    const result = pushResult({
       intent: parsed.intent,
       kind: "navigation",
       message: parsed.message,
@@ -477,6 +751,8 @@ export function LifeOsProvider({
         href: parsed.href,
       },
     });
+    logForResult(parsed.intent, result, "Navigation ready", parsed.message, parsed.href);
+    return result;
   };
 
   const value: LifeOsContextValue = {
@@ -486,6 +762,9 @@ export function LifeOsProvider({
     commandPanelOpen,
     lastCommandResult,
     commandHistory,
+    activeWeeklyPlan,
+    pendingScheduleSuggestions,
+    assistantActivity,
     completeTask,
     startTask,
     moveTaskToTomorrow,
@@ -501,6 +780,14 @@ export function LifeOsProvider({
     closeCommandPanel,
     clearCommandResult,
     runCommand,
+    setActiveWeeklyPlan,
+    applyActiveWeeklyPlan,
+    applyScheduleSuggestion,
+    dismissScheduleSuggestion,
+    clearScheduleSuggestions,
+    logAssistantActivity,
+    markActivityRead,
+    clearActivity,
   };
 
   return <LifeOsContext.Provider value={value}>{children}</LifeOsContext.Provider>;
@@ -515,4 +802,3 @@ export function useLifeOs() {
 
   return context;
 }
-

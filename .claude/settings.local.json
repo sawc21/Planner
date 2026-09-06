@@ -5,7 +5,10 @@
       "Bash(taskkill //PID 44052 //F)",
       "Bash(taskkill //PID 33212 //F)",
       "Bash(taskkill //PID 33908 //F)",
-      "mcp__Claude_Preview__preview_start"
+      "mcp__Claude_Preview__preview_start",
+      "Bash(npx tsc *)",
+      "Bash(npx vitest *)",
+      "Bash(npx next *)"
     ]
   }
 }

@@ -11,14 +11,23 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAtRiskWorkspaces, getBuddyInsight, getConstraintAwarePlan } from "@/lib/life-os/selectors";
 import { useLifeOs } from "@/lib/life-os/state";
 
-type WorkspaceView = "all" | "course" | "project" | "at-risk" | "active";
+type WorkspaceView = "all" | "course" | "project" | "at-risk" | "active" | "focused";
 
 export function WorkspacesView({
   initialType = "",
 }: {
   initialType?: string;
 }) {
-  const { workspaces, tasks, events, materials, milestones, gradebooks, constraintProfile } = useLifeOs();
+  const {
+    workspaces,
+    tasks,
+    events,
+    materials,
+    milestones,
+    gradebooks,
+    constraintProfile,
+    focusedWorkspaceId,
+  } = useLifeOs();
   const [activeView, setActiveView] = useState<WorkspaceView>(
     initialType === "course" || initialType === "project" ? (initialType as WorkspaceView) : "all",
   );
@@ -36,8 +45,11 @@ export function WorkspacesView({
     if (activeView === "active") {
       return sorted.filter((workspace) => workspace.active);
     }
+    if (activeView === "focused") {
+      return sorted.filter((workspace) => workspace.id === focusedWorkspaceId);
+    }
     return sorted;
-  }, [activeView, riskMap, workspaces]);
+  }, [activeView, focusedWorkspaceId, riskMap, workspaces]);
   const leadWorkspace = visibleWorkspaces[0];
   const buddyInsight = getBuddyInsight(
     {
@@ -72,8 +84,14 @@ export function WorkspacesView({
                 ["project", "Projects"],
                 ["at-risk", "At Risk"],
                 ["active", "Active"],
+                ["focused", "Focused"],
               ] as const).map(([value, label]) => (
-                <FilterChip key={value} active={activeView === value} onClick={() => setActiveView(value)}>
+                <FilterChip
+                  key={value}
+                  active={activeView === value}
+                  onClick={() => setActiveView(value)}
+                  disabled={value === "focused" && !focusedWorkspaceId}
+                >
                   {label}
                 </FilterChip>
               ))}
@@ -91,6 +109,7 @@ export function WorkspacesView({
                   eventCount={events.filter((event) => event.workspaceId === workspace.id).length}
                   materialCount={materials.filter((material) => material.workspaceId === workspace.id).length + milestones.filter((milestone) => milestone.workspaceId === workspace.id).length}
                   risk={riskMap.get(workspace.id)}
+                  focused={workspace.id === focusedWorkspaceId}
                 />
               ))}
             </div>

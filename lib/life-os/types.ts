@@ -380,9 +380,76 @@ export type CommandIntent =
   | "create_project"
   | "create_study_session"
   | "generate_weekly_plan"
+  | "apply_weekly_plan"
   | "explain_priority"
   | "what_should_i_do_today"
   | "show_urgent_items";
+
+export type AssistantActivitySurface =
+  | "home"
+  | "calendar"
+  | "workspaces"
+  | "assignments"
+  | "grades"
+  | "assistant";
+
+export type PlannedStep = StudyPlanStep & {
+  scheduledFor: string;
+  applied: boolean;
+  appliedTaskId?: string;
+};
+
+export type ActiveWeeklyPlan = {
+  id: string;
+  generatedAt: string;
+  horizonDays: number;
+  title: string;
+  summary: string;
+  steps: PlannedStep[];
+  appliedAt?: string;
+};
+
+export type ScheduleSuggestionKind = "shift" | "insert" | "reschedule";
+
+export type ScheduleSuggestion = {
+  id: string;
+  generatedAt: string;
+  kind: ScheduleSuggestionKind;
+  taskId?: string;
+  title: string;
+  reason: string;
+  fromAt?: string;
+  toAt: string;
+  affectedDays: string[];
+  status: "pending" | "applied" | "dismissed";
+  appliedAt?: string;
+  estimatedMinutes?: number;
+};
+
+export type AssistantActivityEvent = {
+  id: string;
+  at: string;
+  intent: CommandIntent;
+  title: string;
+  summary: string;
+  affectedSurfaces: AssistantActivitySurface[];
+  href?: string;
+  receiptLines: string[];
+  read: boolean;
+  resultKind: CommandResultKind;
+};
+
+export type CommandResultKind =
+  | "plan_update"
+  | "schedule_update"
+  | "workspace_focus"
+  | "priority_explanation"
+  | "dashboard_update"
+  | "action_receipt"
+  | "mutation"
+  | "recommendation"
+  | "navigation"
+  | "message";
 
 export type CommandResult =
   | {
@@ -411,23 +478,50 @@ export type CommandResult =
     }
   | {
       intent: CommandIntent;
-      kind: "plan";
+      kind: "plan_update";
       message: string;
-      plan: StudyPlan;
+      plan: ActiveWeeklyPlan;
+      appliedCount: number;
       receipt: AssistantReceipt;
     }
   | {
       intent: CommandIntent;
-      kind: "dashboard";
+      kind: "schedule_update";
+      message: string;
+      suggestions: ScheduleSuggestion[];
+      receipt: AssistantReceipt;
+    }
+  | {
+      intent: CommandIntent;
+      kind: "workspace_focus";
+      message: string;
+      workspaceId: string | null;
+      affectedSurfaces: AssistantActivitySurface[];
+      receipt: AssistantReceipt;
+    }
+  | {
+      intent: CommandIntent;
+      kind: "priority_explanation";
+      message: string;
+      recommendation?: TodayRecommendation;
+      affectedSurfaces: AssistantActivitySurface[];
+      receipt: AssistantReceipt;
+    }
+  | {
+      intent: CommandIntent;
+      kind: "dashboard_update";
       message: string;
       widgets: DashboardWidget[];
+      added: DashboardWidgetKind[];
+      removed: DashboardWidgetKind[];
       receipt: AssistantReceipt;
     }
   | {
       intent: CommandIntent;
-      kind: "explanation";
+      kind: "action_receipt";
       message: string;
       receipt: AssistantReceipt;
+      actions: Array<{ label: string; href?: string; intent?: CommandIntent }>;
     }
   | {
       kind: "message";

@@ -1,15 +1,24 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, CalendarRange, Command, LayoutGrid, Sparkles } from "lucide-react";
+import { formatDistanceToNowStrict } from "date-fns";
+import { CalendarRange, Command, LayoutGrid, Sparkles, X } from "lucide-react";
 
+import { CommandResultView } from "@/components/life-os/command-result-view";
 import { PageHeader } from "@/components/life-os/page-header";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { getAssistantResultCards } from "@/lib/life-os/selectors";
+import {
+  getFocusedWorkspaceStatus,
+  getRecentAssistantActivity,
+  getScheduleRebalanceSummary,
+  getWeeklyPlanSummary,
+} from "@/lib/life-os/selectors";
+import type { AssistantActivityEvent, AssistantActivitySurface } from "@/lib/life-os/types";
 import { useLifeOs } from "@/lib/life-os/state";
 import { cn } from "@/lib/utils";
 
@@ -39,24 +48,48 @@ const NEXT_ACTIONS = [
   },
 ];
 
-const CATEGORY_STYLES = {
-  sky: "bg-sky-400/14 text-sky-100 ring-1 ring-sky-300/16",
-  violet: "bg-violet-400/14 text-violet-100 ring-1 ring-violet-300/16",
-  amber: "bg-amber-400/14 text-amber-100 ring-1 ring-amber-300/16",
-  emerald: "bg-emerald-400/14 text-emerald-100 ring-1 ring-emerald-300/16",
-  rose: "bg-rose-400/14 text-rose-100 ring-1 ring-rose-300/16",
-} as const;
+const SURFACE_LABELS: Record<AssistantActivitySurface, string> = {
+  home: "Home",
+  calendar: "Calendar",
+  workspaces: "Workspaces",
+  assignments: "Assignments",
+  grades: "Grades",
+  assistant: "Assistant",
+};
 
 export function CommandCenterView() {
   const router = useRouter();
-  const { commandHistory, lastCommandResult, clearCommandResult, runCommand } = useLifeOs();
+  const {
+    workspaces,
+    tasks,
+    commandHistory,
+    lastCommandResult,
+    clearCommandResult,
+    runCommand,
+    activeWeeklyPlan,
+    pendingScheduleSuggestions,
+    assistantActivity,
+    focusedWorkspaceId,
+    applyActiveWeeklyPlan,
+    applyScheduleSuggestion,
+    dismissScheduleSuggestion,
+    focusWorkspace,
+    markActivityRead,
+  } = useLifeOs();
   const [input, setInput] = useState("");
-  const results = useMemo(
-    () => getAssistantResultCards(lastCommandResult ? [lastCommandResult, ...commandHistory.slice(1)] : commandHistory),
-    [commandHistory, lastCommandResult],
-  );
-  const latest = results[0];
-  const receipts = results.filter((entry) => entry.lines.length > 0).slice(0, 4);
+
+  const resultStack = useMemo(() => {
+    const items = lastCommandResult ? [lastCommandResult, ...commandHistory.slice(1)] : commandHistory;
+    return items.slice(0, 8);
+  }, [commandHistory, lastCommandResult]);
+
+  const planSummary = getWeeklyPlanSummary(activeWeeklyPlan);
+  const rebalanceSummary = getScheduleRebalanceSummary(pendingScheduleSuggestions);
+  const focusStatus = getFocusedWorkspaceStatus(focusedWorkspaceId, workspaces, tasks);
+  const activityFeed = getRecentAssistantActivity(assistantActivity, 12);
+
+  const hasActiveState =
+    Boolean(planSummary) || rebalanceSummary.pendingCount > 0 || Boolean(focusStatus?.workspace);
 
   const executeCommand = (command: string) => {
     const trimmed = command.trim();
@@ -72,6 +105,11 @@ export function CommandCenterView() {
     }
   };
 
+  const handleClearFocus = () => {
+    focusWorkspace(null);
+    runCommand("clear focus");
+  };
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -84,6 +122,78 @@ export function CommandCenterView() {
           </Button>
         }
       />
+
+      {hasActiveState ? (
+        <div
+          data-testid="active-state-strip"
+          className="flex flex-wrap items-center gap-2 rounded-2xl border hairline bg-background/55 px-3 py-2"
+        >
+          {planSummary ? (
+            <div
+              data-testid="assistant-active-plan"
+              className="inline-flex items-center gap-2 rounded-full border hairline bg-sky-400/10 px-3 py-1 text-[11px] text-foreground"
+            >
+              <Sparkles className="size-3.5 text-sky-300" />
+              <span>
+                Active plan · {planSummary.appliedCount}/{planSummary.totalSteps} applied
+              </span>
+              {planSummary.appliedCount < planSummary.totalSteps ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 rounded-full px-2 text-[11px]"
+                  onClick={() => applyActiveWeeklyPlan()}
+                >
+                  Apply
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+          {rebalanceSummary.pendingCount > 0 ? (
+            <div
+              data-testid="assistant-pending-moves"
+              className="inline-flex items-center gap-2 rounded-full border hairline bg-amber-400/10 px-3 py-1 text-[11px] text-foreground"
+            >
+              <CalendarRange className="size-3.5 text-amber-300" />
+              <span>
+                {rebalanceSummary.pendingCount} pending schedule move
+                {rebalanceSummary.pendingCount === 1 ? "" : "s"}
+              </span>
+              <Link
+                href="/calendar"
+                className="text-[11px] font-medium text-primary underline-offset-4 hover:underline"
+              >
+                Review
+              </Link>
+            </div>
+          ) : null}
+          {focusStatus?.workspace ? (
+            <div
+              data-testid="assistant-focused-workspace"
+              className="inline-flex items-center gap-2 rounded-full border hairline bg-emerald-400/10 px-3 py-1 text-[11px] text-foreground"
+            >
+              <Badge
+                variant="outline"
+                className="rounded-full border-emerald-300/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] text-emerald-100"
+              >
+                Focused
+              </Badge>
+              <span>{focusStatus.workspace.shortLabel}</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-6 rounded-full px-2 text-[11px]"
+                onClick={handleClearFocus}
+              >
+                <X className="size-3.5" />
+                Clear
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.45fr)_360px]">
         <div className="space-y-3">
@@ -140,95 +250,59 @@ export function CommandCenterView() {
             </CardContent>
           </Card>
 
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-            <Card className="surface-card rounded-xl border hairline">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg font-semibold tracking-tight">Structured result stack</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2.5">
-                {results.length ? (
-                  results.map((result) => (
-                    <div key={result.id} className="rounded-xl border hairline bg-background/62 p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <span className={cn("inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.16em]", CATEGORY_STYLES[result.accent])}>
-                            {result.category}
-                          </span>
-                          <p className="mt-2 text-[13px] font-medium text-foreground">{result.title}</p>
-                          <p className="mt-1 text-[12px] leading-5 text-muted-foreground">{result.summary}</p>
-                        </div>
-                        {result.href ? <ArrowRight className="mt-1 size-4 text-muted-foreground" /> : null}
-                      </div>
-                      {result.lines.length ? (
-                        <div className="mt-3 grid gap-1.5 text-[11px] text-muted-foreground">
-                          {result.lines.slice(0, 4).map((line) => (
-                            <p key={line}>{line}</p>
-                          ))}
-                        </div>
-                      ) : null}
-                      {result.href ? (
-                        <Link href={result.href} className="mt-3 inline-flex text-[11px] font-medium text-primary underline-offset-4 hover:underline">
-                          Open linked surface
-                        </Link>
-                      ) : null}
-                    </div>
-                  ))
-                ) : (
-                  <div className="rounded-xl border hairline bg-background/52 p-3 text-[12px] text-muted-foreground">
-                    Run a command to start a persistent Orbit result stack.
+          <Card className="surface-card rounded-xl border hairline">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg font-semibold tracking-tight">Structured result stack</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2.5">
+              {resultStack.length ? (
+                resultStack.map((result, index) => (
+                  <div
+                    key={`${result.kind}-${index}`}
+                    data-testid={`result-stack-item-${index}`}
+                  >
+                    <CommandResultView
+                      result={result}
+                      onPlanApply={() => {
+                        applyActiveWeeklyPlan();
+                      }}
+                      onSuggestionApply={(id) => applyScheduleSuggestion(id)}
+                      onSuggestionDismiss={(id) => dismissScheduleSuggestion(id)}
+                      onClearFocus={handleClearFocus}
+                    />
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                ))
+              ) : (
+                <div className="rounded-xl border hairline bg-background/52 p-3 text-[12px] text-muted-foreground">
+                  Run a command to start a persistent Orbit result stack.
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-            <div className="space-y-3">
-              <Card className="surface-card rounded-xl border hairline">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg font-semibold tracking-tight">Action receipts</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2.5">
-                  {receipts.length ? (
-                    receipts.map((receipt) => (
-                      <div key={receipt.id} className="rounded-xl border hairline bg-[var(--surface-soft)]/82 p-3">
-                        <p className="text-[12px] font-medium text-foreground">{receipt.title}</p>
-                        <div className="mt-2 space-y-1 text-[11px] text-muted-foreground">
-                          {receipt.lines.slice(0, 3).map((line) => (
-                            <p key={line}>{line}</p>
-                          ))}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-[12px] text-muted-foreground">Receipts appear here as Orbit changes the board.</p>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card className="surface-card rounded-xl border hairline">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg font-semibold tracking-tight">Suggested next actions</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2.5">
-                  {NEXT_ACTIONS.map((action) => (
-                    <button
-                      key={action.command}
-                      type="button"
-                      onClick={() => executeCommand(action.command)}
-                      className="block w-full rounded-xl border hairline bg-background/62 p-3 text-left transition-colors hover:bg-background/76"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-[12px] font-medium text-foreground">{action.label}</p>
-                          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{action.detail}</p>
-                        </div>
-                        <Command className="size-4 text-muted-foreground" />
-                      </div>
-                    </button>
-                  ))}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
+          <Card className="surface-card rounded-xl border hairline">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg font-semibold tracking-tight">Suggested next actions</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2.5">
+              {NEXT_ACTIONS.map((action) => (
+                <button
+                  key={action.command}
+                  type="button"
+                  onClick={() => executeCommand(action.command)}
+                  className="block w-full rounded-xl border hairline bg-background/62 p-3 text-left transition-colors hover:bg-background/76"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[12px] font-medium text-foreground">{action.label}</p>
+                      <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{action.detail}</p>
+                    </div>
+                    <Command className="size-4 text-muted-foreground" />
+                  </div>
+                </button>
+              ))}
+            </CardContent>
+          </Card>
         </div>
 
         <aside className="space-y-3">
@@ -237,10 +311,6 @@ export function CommandCenterView() {
               <CardTitle className="text-lg font-semibold tracking-tight">Current focus</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-[12px] text-muted-foreground">
-              <div className="rounded-xl border hairline bg-background/62 p-3">
-                <p className="font-medium text-foreground">{latest?.title ?? "Orbit standby"}</p>
-                <p className="mt-1 leading-5">{latest?.summary ?? "Run a command to build the first active result."}</p>
-              </div>
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
                 <div className="rounded-xl border hairline bg-background/55 p-3">
                   <LayoutGrid className="size-3.5 text-primary" />
@@ -256,25 +326,75 @@ export function CommandCenterView() {
             </CardContent>
           </Card>
 
-          <Card className="surface-card rounded-xl border hairline">
+          <Card data-testid="activity-pane" className="surface-card rounded-xl border hairline">
             <CardHeader className="pb-2">
-              <CardTitle className="text-lg font-semibold tracking-tight">Recent history</CardTitle>
+              <CardTitle className="text-lg font-semibold tracking-tight">Activity</CardTitle>
+              <p className="text-[11px] leading-4 text-muted-foreground">
+                Orbit receipts, plans, and schedule moves land here first.
+              </p>
             </CardHeader>
             <CardContent className="space-y-2">
-              {results.length ? (
-                results.slice(0, 6).map((result) => (
-                  <div key={`${result.id}-history`} className="rounded-lg border hairline bg-background/55 px-3 py-2">
-                    <p className="text-[11px] font-medium text-foreground">{result.category}</p>
-                    <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{result.title}</p>
-                  </div>
+              {activityFeed.length ? (
+                activityFeed.map((entry) => (
+                  <ActivityRow
+                    key={entry.id}
+                    entry={entry}
+                    onClick={() => markActivityRead(entry.id)}
+                  />
                 ))
               ) : (
-                <p className="text-[12px] text-muted-foreground">No command history yet.</p>
+                <p className="text-[12px] text-muted-foreground">No assistant activity yet.</p>
               )}
             </CardContent>
           </Card>
         </aside>
       </div>
     </div>
+  );
+}
+
+function ActivityRow({
+  entry,
+  onClick,
+}: {
+  entry: AssistantActivityEvent;
+  onClick: () => void;
+}) {
+  const href = entry.href ?? "/assistant";
+  return (
+    <Link
+      data-testid={`activity-row-${entry.id}`}
+      data-read={entry.read ? "true" : "false"}
+      href={href}
+      onClick={onClick}
+      className={cn(
+        "block rounded-lg border hairline px-3 py-2 text-[11px] transition-colors",
+        entry.read
+          ? "bg-background/40 text-muted-foreground hover:bg-background/60"
+          : "bg-[var(--surface-soft)]/88 text-foreground hover:bg-[var(--surface-soft)]",
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-medium text-foreground">{entry.title}</p>
+          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{entry.summary}</p>
+        </div>
+        <span className="shrink-0 text-[10px] text-muted-foreground/70">
+          {formatDistanceToNowStrict(new Date(entry.at), { addSuffix: true })}
+        </span>
+      </div>
+      {entry.affectedSurfaces.length ? (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {entry.affectedSurfaces.map((surface) => (
+            <span
+              key={surface}
+              className="rounded-full border hairline bg-background/40 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] text-muted-foreground/80"
+            >
+              {SURFACE_LABELS[surface]}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </Link>
   );
 }

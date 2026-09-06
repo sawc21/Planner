@@ -1,15 +1,25 @@
 ﻿import { buildCalmLifeOsData, buildSeedLifeOsData } from "@/lib/life-os/mock-data";
 import {
+  buildActiveWeeklyPlan,
+  computeScheduleRebalance,
   getAgendaGroups,
   getAtRiskWorkspaces,
   getConstraintAwarePlan,
+  getFocusedWorkspaceStatus,
   getGradeWhatIfCards,
   getHomeWidgetData,
   getOverloadAssessment,
+  getRecentAssistantActivity,
+  getScheduleRebalanceSummary,
   getSemesterGpaSnapshot,
   getTodayRecommendations,
   getUrgentDeadlines,
+  getWeeklyPlanSummary,
 } from "@/lib/life-os/selectors";
+import type {
+  AssistantActivityEvent,
+  ScheduleSuggestion,
+} from "@/lib/life-os/types";
 
 const REFERENCE_DATE = new Date("2026-04-16T09:00:00-05:00");
 
@@ -71,5 +81,102 @@ describe("orbit selectors", () => {
     expect(semester.gpa).toBeGreaterThan(0);
     expect(cards.length).toBeGreaterThan(0);
     expect(cards[0]?.neededScore).toBeGreaterThan(0);
+  });
+
+  it("buildActiveWeeklyPlan produces placed steps for the seed data", () => {
+    const data = buildSeedLifeOsData(REFERENCE_DATE);
+    const plan = buildActiveWeeklyPlan(data, REFERENCE_DATE);
+
+    expect(plan.steps.length).toBeGreaterThan(0);
+    plan.steps.forEach((step) => {
+      expect(step.applied).toBe(false);
+      expect(step.scheduledFor).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    });
+  });
+
+  it("computeScheduleRebalance is deterministic across calls", () => {
+    const data = buildSeedLifeOsData(REFERENCE_DATE);
+    const first = computeScheduleRebalance(data, REFERENCE_DATE);
+    const second = computeScheduleRebalance(data, REFERENCE_DATE);
+
+    expect(first.length).toBeLessThanOrEqual(5);
+    expect(first.map((s) => s.title)).toEqual(second.map((s) => s.title));
+  });
+
+  it("getWeeklyPlanSummary totals minutes and counts applied steps", () => {
+    const data = buildSeedLifeOsData(REFERENCE_DATE);
+    const plan = buildActiveWeeklyPlan(data, REFERENCE_DATE);
+    const summary = getWeeklyPlanSummary(plan);
+
+    expect(summary).not.toBeNull();
+    expect(summary!.totalSteps).toBe(plan.steps.length);
+    expect(summary!.appliedCount).toBe(0);
+    expect(summary!.totalMinutes).toBe(
+      plan.steps.reduce((sum, step) => sum + step.minutes, 0),
+    );
+  });
+
+  it("getWeeklyPlanSummary returns null when no active plan", () => {
+    expect(getWeeklyPlanSummary(null)).toBeNull();
+  });
+
+  it("getScheduleRebalanceSummary counts pending vs applied", () => {
+    const base: ScheduleSuggestion = {
+      id: "s-1",
+      generatedAt: REFERENCE_DATE.toISOString(),
+      kind: "shift",
+      title: "Move PHYS set",
+      reason: "Thursday is heavy",
+      toAt: "2026-04-17T15:00:00-05:00",
+      affectedDays: ["2026-04-17"],
+      status: "pending",
+    };
+    const summary = getScheduleRebalanceSummary([
+      { ...base, id: "s-1", status: "pending" },
+      { ...base, id: "s-2", status: "applied", appliedAt: "now" },
+      { ...base, id: "s-3", status: "dismissed" },
+    ]);
+
+    expect(summary.pendingCount).toBe(1);
+    expect(summary.appliedCount).toBe(1);
+    expect(summary.affectedDays).toContain("2026-04-17");
+  });
+
+  it("getFocusedWorkspaceStatus returns the focused workspace metadata", () => {
+    const data = buildSeedLifeOsData(REFERENCE_DATE);
+    const courseWorkspace = data.workspaces.find((w) => w.kind === "course");
+
+    expect(courseWorkspace).toBeDefined();
+    const status = getFocusedWorkspaceStatus(
+      courseWorkspace!.id,
+      data.workspaces,
+      data.tasks,
+    );
+
+    expect(status).not.toBeNull();
+    expect(status!.workspace?.id).toBe(courseWorkspace!.id);
+    expect(status!.surfaces).toContain("workspaces");
+  });
+
+  it("getFocusedWorkspaceStatus returns null without a focus", () => {
+    const data = buildSeedLifeOsData(REFERENCE_DATE);
+    expect(getFocusedWorkspaceStatus(null, data.workspaces, data.tasks)).toBeNull();
+  });
+
+  it("getRecentAssistantActivity truncates to the limit", () => {
+    const events: AssistantActivityEvent[] = Array.from({ length: 20 }, (_, index) => ({
+      id: `event-${index}`,
+      at: new Date(REFERENCE_DATE.getTime() - index * 1000).toISOString(),
+      intent: "build_dashboard",
+      title: `Event ${index}`,
+      summary: "summary",
+      affectedSurfaces: ["home"],
+      receiptLines: [],
+      read: false,
+      resultKind: "dashboard_update",
+    }));
+
+    expect(getRecentAssistantActivity(events, 5)).toHaveLength(5);
+    expect(getRecentAssistantActivity(events).length).toBeLessThanOrEqual(8);
   });
 });

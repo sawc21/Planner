@@ -1,4 +1,4 @@
-﻿import { parseCommandInput } from "@/lib/life-os/commands";
+﻿import { INTENT_AFFECTED_SURFACES, parseCommandInput } from "@/lib/life-os/commands";
 
 describe("command parsing", () => {
   it.each([
@@ -9,6 +9,8 @@ describe("command parsing", () => {
     ["create project orbit launch site", "create_project"],
     ["create study session OS quiz review", "create_study_session"],
     ["generate weekly plan", "generate_weekly_plan"],
+    ["apply weekly plan", "apply_weekly_plan"],
+    ["apply plan", "apply_weekly_plan"],
     ["explain priority", "explain_priority"],
     ["show urgent items", "show_urgent_items"],
   ])("parses %s into %s", (input, intent) => {
@@ -31,5 +33,31 @@ describe("command parsing", () => {
 
     expect(result.kind).toBe("message");
     expect(result.message).toMatch(/i can help with/i);
+  });
+
+  it("parses clear focus into a clear-focus intent", () => {
+    const result = parseCommandInput("clear focus");
+
+    expect(result.kind).toBe("clear_focus");
+  });
+
+  it("parses remove focus as a clear-focus intent", () => {
+    const result = parseCommandInput("remove focus");
+
+    expect(result.kind).toBe("clear_focus");
+  });
+
+  it("parses rebalance schedule as a rebalance intent (not navigation)", () => {
+    const result = parseCommandInput("rebalance schedule");
+
+    expect(result.kind).toBe("rebalance");
+  });
+
+  it("exposes affected surfaces for every known intent", () => {
+    expect(INTENT_AFFECTED_SURFACES.rebalance_schedule).toContain("calendar");
+    expect(INTENT_AFFECTED_SURFACES.focus_workspace).toContain("workspaces");
+    expect(INTENT_AFFECTED_SURFACES.generate_weekly_plan).toContain("assistant");
+    expect(INTENT_AFFECTED_SURFACES.apply_weekly_plan).toContain("calendar");
+    expect(INTENT_AFFECTED_SURFACES.build_dashboard).toContain("home");
   });
 });

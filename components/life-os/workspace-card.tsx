@@ -15,6 +15,7 @@ export function WorkspaceCard({
   eventCount,
   materialCount,
   risk,
+  focused = false,
 }: {
   workspace: Workspace;
   href: string;
@@ -22,9 +23,16 @@ export function WorkspaceCard({
   eventCount: number;
   materialCount: number;
   risk?: WorkspaceRisk;
+  focused?: boolean;
 }) {
   return (
-    <Card className="surface-card rounded-xl border hairline transition-transform duration-150 hover:-translate-y-0.5 hover:border-primary/24">
+    <Card
+      data-focused={focused ? "true" : undefined}
+      className={cn(
+        "surface-card rounded-xl border hairline transition-transform duration-150 hover:-translate-y-0.5 hover:border-primary/24",
+        focused && "ring-1 ring-emerald-300/40",
+      )}
+    >
       <Link href={href} className="block">
         <CardHeader className="space-y-3 pb-3">
           <div className="flex items-start justify-between gap-3">
@@ -35,6 +43,11 @@ export function WorkspaceCard({
               <span className="font-mono text-[11px] font-medium uppercase tracking-[0.18em]">
                 {workspace.shortLabel}
               </span>
+              {focused ? (
+                <span className="rounded-full bg-emerald-400/18 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.16em] text-emerald-100">
+                  Focused
+                </span>
+              ) : null}
             </span>
             <span className="rounded-md border hairline bg-[var(--surface-soft)] px-2 py-0.5 text-[11px] text-muted-foreground">
               {WORKSPACE_KIND_LABELS[workspace.kind]}

@@ -2,15 +2,20 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { CalendarRange, Clock3, Sparkles } from "lucide-react";
+import { CalendarRange, Check, Clock3, Sparkles, X } from "lucide-react";
 
 import { EmptyState } from "@/components/life-os/empty-state";
 import { EventCard } from "@/components/life-os/event-card";
 import { LifeItemCard } from "@/components/life-os/life-item-card";
 import { PageHeader } from "@/components/life-os/page-header";
-import { buttonVariants } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getAgendaGroups, getTodayRecommendations } from "@/lib/life-os/selectors";
+import {
+  getAgendaGroups,
+  getScheduleRebalanceSummary,
+  getTodayRecommendations,
+} from "@/lib/life-os/selectors";
 import { useLifeOs } from "@/lib/life-os/state";
 import { cn } from "@/lib/utils";
 
@@ -25,8 +30,22 @@ export function CalendarView() {
     completeTask,
     moveTaskToTomorrow,
     startTask,
+    pendingScheduleSuggestions,
+    activeWeeklyPlan,
+    applyScheduleSuggestion,
+    dismissScheduleSuggestion,
   } = useLifeOs();
   const agendaGroups = getAgendaGroups({ workspaces, tasks, events });
+  const rebalanceSummary = getScheduleRebalanceSummary(pendingScheduleSuggestions);
+  const pendingSuggestions = pendingScheduleSuggestions.filter(
+    (entry) => entry.status === "pending",
+  );
+  const planSteps = activeWeeklyPlan?.steps ?? [];
+  const planDayCounts = planSteps.reduce<Map<string, number>>((map, step) => {
+    const key = step.scheduledFor.slice(0, 10);
+    map.set(key, (map.get(key) ?? 0) + 1);
+    return map;
+  }, new Map());
   const [selectedKey, setSelectedKey] = useState(agendaGroups[0]?.key ?? "");
   const selectedDay = useMemo(
     () => agendaGroups.find((group) => group.key === selectedKey) ?? agendaGroups[0],
@@ -80,6 +99,16 @@ export function CalendarView() {
                         {window}
                       </span>
                     ))}
+                    {planDayCounts.get(group.key) ? (
+                      <span
+                        data-testid={`plan-marker-${group.key}`}
+                        className="inline-flex items-center gap-1 rounded-md bg-sky-400/12 px-2 py-0.5 text-[10px] text-sky-100"
+                      >
+                        <span className="size-1.5 rounded-full bg-sky-300" />
+                        {planDayCounts.get(group.key)} plan step
+                        {(planDayCounts.get(group.key) ?? 0) > 1 ? "s" : ""}
+                      </span>
+                    ) : null}
                   </div>
                 </button>
               ))}
@@ -108,6 +137,69 @@ export function CalendarView() {
         </div>
 
         <aside className="space-y-3">
+          <Card data-testid="pending-schedule-panel" className="surface-card rounded-xl border hairline">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg font-semibold tracking-tight">Pending schedule moves</CardTitle>
+              <p className="text-[12px] leading-5 text-muted-foreground">
+                {rebalanceSummary.pendingCount} pending ·{" "}
+                {rebalanceSummary.appliedCount} applied
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {pendingSuggestions.length ? (
+                pendingSuggestions.map((suggestion) => (
+                  <div
+                    key={suggestion.id}
+                    className="rounded-xl border hairline bg-background/55 px-3 py-2"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-[12px] font-medium text-foreground">
+                          {suggestion.title}
+                        </p>
+                        <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                          {suggestion.reason}
+                        </p>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="rounded-full border-amber-300/20 bg-amber-400/10 px-2 py-0.5 text-[10px] text-amber-100"
+                      >
+                        Pending
+                      </Badge>
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 rounded-full px-3 text-[11px]"
+                        onClick={() => applyScheduleSuggestion(suggestion.id)}
+                      >
+                        <Check className="size-3.5" />
+                        Apply
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 rounded-full px-3 text-[11px]"
+                        onClick={() => dismissScheduleSuggestion(suggestion.id)}
+                      >
+                        <X className="size-3.5" />
+                        Dismiss
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-[12px] text-muted-foreground">
+                  No schedule changes pending. Ask the assistant to rebalance your week.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
           <Card className="surface-card rounded-xl border hairline">
             <CardHeader className="pb-2">
               <CardTitle className="text-lg font-semibold tracking-tight">Selected day</CardTitle>

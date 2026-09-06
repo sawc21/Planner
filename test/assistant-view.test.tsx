@@ -27,6 +27,7 @@ describe("CommandCenterView", () => {
     expect(screen.getByText(/dedicated assistant workbench/i)).toBeInTheDocument();
     expect(screen.getByText(/structured result stack/i)).toBeInTheDocument();
     expect(screen.getAllByText(/weekly plan ready/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/action receipts/i)).toBeInTheDocument();
+    expect(screen.getByTestId("activity-pane")).toBeInTheDocument();
+    expect(screen.getByTestId("assistant-active-plan")).toBeInTheDocument();
   });
 });

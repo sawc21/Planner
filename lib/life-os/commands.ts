@@ -1,14 +1,18 @@
-﻿import type {
+import type {
+  ActiveWeeklyPlan,
   AddEventInput,
   AddMaterialInput,
   AddTaskInput,
+  AssistantActivitySurface,
   AssistantReceipt,
   CommandIntent,
   CommandResult,
   CreateWorkspaceInput,
   DashboardWidget,
-  StudyPlan,
+  DashboardWidgetKind,
+  ScheduleSuggestion,
   TodayRecommendation,
+  Workspace,
 } from "@/lib/life-os/types";
 
 type ParsedCommand =
@@ -47,25 +51,40 @@ type ParsedCommand =
       message: string;
     }
   | {
+      intent: "apply_weekly_plan";
+      kind: "apply_plan";
+      message: string;
+    }
+  | {
       intent: "build_dashboard" | "suggest_widgets";
       kind: "dashboard";
       message: string;
     }
   | {
-      intent: "rebalance_schedule" | "show_urgent_items";
+      intent: "rebalance_schedule";
+      kind: "rebalance";
+      message: string;
+    }
+  | {
+      intent: "show_urgent_items";
       kind: "navigation";
       href: string;
       message: string;
     }
   | {
       intent: "focus_workspace";
-      kind: "explanation";
+      kind: "focus_workspace";
       target: string;
       message: string;
     }
   | {
+      intent: "focus_workspace";
+      kind: "clear_focus";
+      message: string;
+    }
+  | {
       intent: "explain_priority";
-      kind: "explanation";
+      kind: "explain";
       message: string;
     }
   | {
@@ -179,6 +198,14 @@ export function parseCommandInput(input: string): ParsedCommand {
     };
   }
 
+  if (/^(apply weekly plan|apply plan|schedule weekly plan)$/i.test(trimmed)) {
+    return {
+      intent: "apply_weekly_plan",
+      kind: "apply_plan",
+      message: "Applying the active weekly plan to this week.",
+    };
+  }
+
   if (/^(build dashboard|refresh home)$/i.test(trimmed)) {
     return {
       intent: "build_dashboard",
@@ -198,9 +225,8 @@ export function parseCommandInput(input: string): ParsedCommand {
   if (/^(rebalance schedule|rebalance week|rebalance the week)$/i.test(trimmed)) {
     return {
       intent: "rebalance_schedule",
-      kind: "navigation",
-      href: "/calendar?view=rebalance",
-      message: "Opening the calendar so Orbit can rebalance the week.",
+      kind: "rebalance",
+      message: "Rebalancing this week around current load.",
     };
   }
 
@@ -213,11 +239,19 @@ export function parseCommandInput(input: string): ParsedCommand {
     };
   }
 
+  if (/^(clear focus|remove focus|unfocus workspace|clear workspace focus)$/i.test(trimmed)) {
+    return {
+      intent: "focus_workspace",
+      kind: "clear_focus",
+      message: "Cleared the workspace focus.",
+    };
+  }
+
   const focusWorkspaceMatch = trimmed.match(/^focus workspace\s+(.+)$/i);
   if (focusWorkspaceMatch?.[1]?.trim()) {
     return {
       intent: "focus_workspace",
-      kind: "explanation",
+      kind: "focus_workspace",
       target: focusWorkspaceMatch[1].trim(),
       message: `Focusing workspace: ${focusWorkspaceMatch[1].trim()}.`,
     };
@@ -226,7 +260,7 @@ export function parseCommandInput(input: string): ParsedCommand {
   if (/^(explain priority|why this)$/i.test(trimmed)) {
     return {
       intent: "explain_priority",
-      kind: "explanation",
+      kind: "explain",
       message: "Explaining why Orbit picked the current priority.",
     };
   }
@@ -234,9 +268,26 @@ export function parseCommandInput(input: string): ParsedCommand {
   return {
     kind: "message",
     message:
-      "I can help with add task, add event, add material, build dashboard, suggest widgets, rebalance schedule, focus workspace, create project, create study session, generate weekly plan, explain priority, or show urgent items.",
+      "I can help with add task, add event, add material, build dashboard, suggest widgets, rebalance schedule, focus workspace, clear focus, create project, create study session, generate weekly plan, apply weekly plan, explain priority, or show urgent items.",
   };
 }
+
+export const INTENT_AFFECTED_SURFACES: Record<CommandIntent, AssistantActivitySurface[]> = {
+  add_task: ["assignments", "calendar", "home"],
+  add_event: ["calendar", "home"],
+  add_material: ["workspaces"],
+  build_dashboard: ["home"],
+  suggest_widgets: ["home"],
+  rebalance_schedule: ["calendar", "home"],
+  focus_workspace: ["workspaces", "home", "assistant"],
+  create_project: ["workspaces", "home"],
+  create_study_session: ["calendar", "assignments", "home"],
+  generate_weekly_plan: ["home", "calendar", "assistant"],
+  apply_weekly_plan: ["calendar", "assignments", "home"],
+  explain_priority: ["assistant", "home"],
+  what_should_i_do_today: ["home", "assistant"],
+  show_urgent_items: ["assignments", "home"],
+};
 
 function createReceipt(title: string, lines: string[], href?: string): AssistantReceipt {
   return { title, lines, href };
@@ -255,61 +306,182 @@ export function buildRecommendationCommandResult(
     receipt: createReceipt(
       "Priority explanation",
       recommendation
-        ? [
-            recommendation.reason,
-            ...recommendation.scoreBreakdown,
-          ]
+        ? [recommendation.reason, ...recommendation.scoreBreakdown]
         : ["The board is calm enough to choose one meaningful next move."],
       "/home",
     ),
   };
 }
 
-export function buildPlanCommandResult(plan: StudyPlan): CommandResult {
+export function buildPlanCommandResult(plan: ActiveWeeklyPlan): CommandResult {
+  const appliedCount = plan.steps.filter((step) => step.applied).length;
+
   return {
     intent: "generate_weekly_plan",
-    kind: "plan",
+    kind: "plan_update",
     message: plan.summary,
     plan,
+    appliedCount,
     receipt: createReceipt(
       "Weekly plan ready",
-      plan.steps.map((step) => `${step.title} Â· ${step.minutes} min`),
+      plan.steps.map((step) => `${step.title} · ${step.minutes} min`),
       "/assistant",
     ),
+  };
+}
+
+export function buildApplyPlanCommandResult(
+  appliedCount: number,
+  totalSteps: number,
+  plan: ActiveWeeklyPlan | null,
+): CommandResult {
+  return {
+    intent: "apply_weekly_plan",
+    kind: "action_receipt",
+    message: plan
+      ? `Applied ${appliedCount} of ${totalSteps} plan steps to this week.`
+      : "No active weekly plan to apply yet. Generate one first.",
+    receipt: createReceipt(
+      "Plan applied",
+      plan
+        ? plan.steps
+            .filter((step) => step.applied)
+            .map((step) => `${step.title} · scheduled`)
+        : ["Run generate weekly plan to build one."],
+      "/calendar",
+    ),
+    actions: plan
+      ? [
+          { label: "Open calendar", href: "/calendar" },
+          { label: "Open assignments", href: "/assignments" },
+        ]
+      : [{ label: "Generate plan", intent: "generate_weekly_plan" }],
   };
 }
 
 export function buildDashboardCommandResult(
   intent: Extract<CommandIntent, "build_dashboard" | "suggest_widgets">,
   widgets: DashboardWidget[],
+  added: DashboardWidgetKind[],
+  removed: DashboardWidgetKind[],
 ): CommandResult {
   return {
     intent,
-    kind: "dashboard",
+    kind: "dashboard_update",
     message:
       intent === "build_dashboard"
         ? "Home has been rebuilt around Orbit's current priorities."
         : "Orbit suggested a sharper widget mix for Home.",
     widgets,
+    added,
+    removed,
     receipt: createReceipt(
       "Home widgets",
-      widgets.map((widget) => widget.title),
+      [
+        ...widgets.map((widget) => widget.title),
+        ...(added.length ? [`Added: ${added.join(", ")}`] : []),
+        ...(removed.length ? [`Removed: ${removed.join(", ")}`] : []),
+      ],
       "/home",
     ),
   };
 }
 
-export function buildExplanationResult(
-  intent: Extract<CommandIntent, "focus_workspace" | "explain_priority">,
-  title: string,
-  lines: string[],
-  href?: string,
+export function buildWorkspaceFocusResult(
+  workspace: Workspace | null,
+  linkedTaskCount: number,
+  milestoneCount: number,
 ): CommandResult {
+  if (!workspace) {
+    return {
+      intent: "focus_workspace",
+      kind: "workspace_focus",
+      message: "Cleared the workspace focus.",
+      workspaceId: null,
+      affectedSurfaces: INTENT_AFFECTED_SURFACES.focus_workspace,
+      receipt: createReceipt(
+        "Focus cleared",
+        ["Home ranking and workspace card rings are back to the default mix."],
+        "/home",
+      ),
+    };
+  }
+
   return {
-    intent,
-    kind: "explanation",
-    message: title,
-    receipt: createReceipt(title, lines, href),
+    intent: "focus_workspace",
+    kind: "workspace_focus",
+    message: `Focused workspace: ${workspace.name}.`,
+    workspaceId: workspace.id,
+    affectedSurfaces: INTENT_AFFECTED_SURFACES.focus_workspace,
+    receipt: createReceipt(
+      `Focus ${workspace.shortLabel}`,
+      [
+        workspace.progressSummary,
+        `${linkedTaskCount} linked tasks and ${milestoneCount} milestones are visible.`,
+      ],
+      `/workspaces/${workspace.id}`,
+    ),
   };
 }
 
+export function buildFocusNotFoundResult(target: string): CommandResult {
+  return {
+    intent: "focus_workspace",
+    kind: "workspace_focus",
+    message: `No workspace matched "${target}".`,
+    workspaceId: null,
+    affectedSurfaces: INTENT_AFFECTED_SURFACES.focus_workspace,
+    receipt: createReceipt(
+      "Workspace not found",
+      ["Try a workspace name or short label that exists on the board."],
+      "/workspaces",
+    ),
+  };
+}
+
+export function buildPriorityExplanationResult(
+  recommendation: TodayRecommendation | undefined,
+  atRiskReason?: string,
+): CommandResult {
+  return {
+    intent: "explain_priority",
+    kind: "priority_explanation",
+    message: recommendation
+      ? `Start with ${recommendation.item.title}. ${recommendation.reason}`
+      : "The board is calm enough that no single item is dominating the day.",
+    recommendation,
+    affectedSurfaces: INTENT_AFFECTED_SURFACES.explain_priority,
+    receipt: createReceipt(
+      "Why Orbit picked this",
+      recommendation
+        ? [
+            recommendation.reason,
+            recommendation.explanation,
+            atRiskReason ?? "No workspace is clearly slipping.",
+          ]
+        : ["The board is calm enough that no single item is dominating the day."],
+      "/home",
+    ),
+  };
+}
+
+export function buildScheduleUpdateResult(
+  suggestions: ScheduleSuggestion[],
+): CommandResult {
+  const pending = suggestions.filter((entry) => entry.status === "pending");
+  return {
+    intent: "rebalance_schedule",
+    kind: "schedule_update",
+    message: suggestions.length
+      ? `Orbit suggested ${pending.length} schedule move${pending.length === 1 ? "" : "s"} for the week.`
+      : "No schedule changes needed — the week already balances.",
+    suggestions,
+    receipt: createReceipt(
+      "Schedule rebalance",
+      suggestions.length
+        ? suggestions.map((entry) => `${entry.title} · ${entry.reason}`)
+        : ["The week already fits within open windows."],
+      "/calendar",
+    ),
+  };
+}

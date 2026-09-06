@@ -1,23 +1,27 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { format } from "date-fns";
-import { ArrowRight, CalendarClock, LayoutGrid, Sparkles } from "lucide-react";
+import { format, formatDistanceToNowStrict } from "date-fns";
+import { ArrowRight, CalendarClock, LayoutGrid, Sparkles, X } from "lucide-react";
 
 import { BuddyPanel } from "@/components/life-os/buddy-panel";
 import { ConstraintCard } from "@/components/life-os/constraint-card";
 import { OverloadWarningCard } from "@/components/life-os/overload-warning-card";
 import { PageHeader } from "@/components/life-os/page-header";
+import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   buildDailyNarrative,
   getBuddyInsight,
   getConstraintAwarePlan,
+  getFocusedWorkspaceStatus,
   getHomeBriefingItems,
   getHomeWidgetData,
   getOverloadAssessment,
+  getRecentAssistantActivity,
   getTodayRecommendations,
+  getWeeklyPlanSummary,
 } from "@/lib/life-os/selectors";
 import { useLifeOs } from "@/lib/life-os/state";
 import { cn } from "@/lib/utils";
@@ -41,10 +45,15 @@ export function DashboardView() {
     gradebooks,
     constraintProfile,
     commandHistory,
+    assistantActivity,
+    activeWeeklyPlan,
+    focusedWorkspaceId,
     completeTask,
     moveTaskToTomorrow,
     startTask,
     openCommandPanel,
+    focusWorkspace,
+    runCommand,
   } = useLifeOs();
 
   const snapshot = {
@@ -63,10 +72,15 @@ export function DashboardView() {
   const buddyInsight = getBuddyInsight(snapshot);
   const plan = getConstraintAwarePlan({ workspaces, tasks, constraintProfile });
   const narrative = buildDailyNarrative(snapshot);
-  const briefings = getHomeBriefingItems(commandHistory).slice(0, 3);
+  const activityFeed = getRecentAssistantActivity(assistantActivity, 5);
+  const briefings = activityFeed.length
+    ? []
+    : getHomeBriefingItems(commandHistory).slice(0, 3);
   const widgetData = getHomeWidgetData(snapshot).filter(
     (entry) => entry.widget.kind !== "primary_recommendation",
   );
+  const planSummary = getWeeklyPlanSummary(activeWeeklyPlan);
+  const focusStatus = getFocusedWorkspaceStatus(focusedWorkspaceId, workspaces, tasks);
 
   return (
     <div className="space-y-4">
@@ -86,6 +100,55 @@ export function DashboardView() {
           </div>
         }
       />
+
+      {planSummary || focusStatus ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {planSummary ? (
+            <div
+              data-testid="active-plan-chip"
+              className="inline-flex items-center gap-2 rounded-full border hairline bg-sky-400/10 px-3 py-1 text-[11px] text-foreground"
+            >
+              <Sparkles className="size-3.5 text-sky-300" />
+              <span>
+                Active weekly plan · {planSummary.appliedCount}/{planSummary.totalSteps} applied · {planSummary.totalMinutes}m
+              </span>
+              <Link
+                href="/assistant"
+                className="text-[11px] font-medium text-primary underline-offset-4 hover:underline"
+              >
+                View
+              </Link>
+            </div>
+          ) : null}
+          {focusStatus && focusStatus.workspace ? (
+            <div
+              data-testid="focused-workspace-chip"
+              className="inline-flex items-center gap-2 rounded-full border hairline bg-emerald-400/10 px-3 py-1 text-[11px] text-foreground"
+            >
+              <Badge
+                variant="outline"
+                className="rounded-full border-emerald-300/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] text-emerald-100"
+              >
+                Focused
+              </Badge>
+              <span>{focusStatus.workspace.shortLabel}</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-6 rounded-full px-2 text-[11px]"
+                onClick={() => {
+                  focusWorkspace(null);
+                  runCommand("clear focus");
+                }}
+              >
+                <X className="size-3.5" />
+                Clear
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <Card className="surface-panel rounded-2xl border-none">
         <CardContent className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
@@ -135,8 +198,39 @@ export function DashboardView() {
                 Open workbench
               </Link>
             </div>
-            <div className="mt-3 grid gap-2">
-              {briefings.length ? (
+            <div data-testid="activity-strip" className="mt-3 grid gap-2">
+              {activityFeed.length ? (
+                activityFeed.map((entry) => (
+                  <Link
+                    key={entry.id}
+                    href={entry.href ?? "/assistant"}
+                    className="rounded-lg border hairline bg-[var(--surface-soft)]/88 px-3 py-2 text-[11px] text-muted-foreground transition-colors hover:bg-[var(--surface-soft)]"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <span className="font-medium text-foreground">{entry.title}</span>
+                        <span className="mx-1 text-muted-foreground/70">·</span>
+                        {entry.summary}
+                      </div>
+                      <span className="shrink-0 text-[10px] text-muted-foreground/70">
+                        {formatDistanceToNowStrict(new Date(entry.at), { addSuffix: true })}
+                      </span>
+                    </div>
+                    {entry.affectedSurfaces.length ? (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {entry.affectedSurfaces.slice(0, 3).map((surface) => (
+                          <span
+                            key={surface}
+                            className="rounded-full border hairline bg-background/40 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] text-muted-foreground/80"
+                          >
+                            {surface}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </Link>
+                ))
+              ) : briefings.length ? (
                 briefings.map((item) => (
                   <Link
                     key={item.id}

@@ -9,13 +9,17 @@
   isSameDay,
   isToday,
   parseISO,
+  set,
   startOfDay,
   startOfWeek,
 } from "date-fns";
 
 import type {
+  ActiveWeeklyPlan,
   AgendaDayGroup,
   AgendaEntry,
+  AssistantActivityEvent,
+  AssistantActivitySurface,
   AssistantResultCard,
   AssistantReceipt,
   CommandResult,
@@ -28,8 +32,10 @@ import type {
   HomeBriefingItem,
   LifeOsSnapshot,
   OverloadAssessment,
+  PlannedStep,
   ProgressCard,
   ProjectMilestone,
+  ScheduleSuggestion,
   StudyBuddyInsight,
   StudyPlan,
   StudyPlanStep,
@@ -931,13 +937,17 @@ export function buildWidgetReceipt(widgets: DashboardWidget[]): AssistantReceipt
 }
 
 function getAssistantCategory(result: CommandResult): AssistantResultCard["category"] {
-  if (result.kind === "dashboard") {
+  if (result.kind === "dashboard_update") {
     return "Dashboard Update";
   }
-  if (result.kind === "plan") {
+  if (result.kind === "plan_update" || result.kind === "schedule_update") {
     return "Plan";
   }
-  if (result.kind === "explanation" || result.kind === "recommendation") {
+  if (
+    result.kind === "priority_explanation" ||
+    result.kind === "recommendation" ||
+    result.kind === "workspace_focus"
+  ) {
     return "Priority Explanation";
   }
   if (result.kind === "navigation") {
@@ -973,11 +983,13 @@ export function getAssistantResultCards(results: CommandResult[]): AssistantResu
     const lines =
       "receipt" in result && result.receipt
         ? result.receipt.lines
-        : result.kind === "plan"
+        : result.kind === "plan_update"
           ? result.plan.steps.map((step) => `${step.title} · ${step.minutes} min`)
-          : result.kind === "recommendation" && result.recommendation
-            ? result.recommendation.scoreBreakdown
-            : [];
+          : result.kind === "schedule_update"
+            ? result.suggestions.map((entry) => `${entry.title} · ${entry.reason}`)
+            : result.kind === "recommendation" && result.recommendation
+              ? result.recommendation.scoreBreakdown
+              : [];
 
     return [
       {
@@ -1011,15 +1023,19 @@ export function getHomeBriefingItems(results: CommandResult[]): HomeBriefingItem
       {
         id: `${result.kind}-${index}`,
         label:
-          result.kind === "dashboard"
+          result.kind === "dashboard_update"
             ? "Dashboard"
-            : result.kind === "plan"
+            : result.kind === "plan_update"
               ? "Plan"
-              : result.kind === "navigation"
-                ? "Route"
-                : result.kind === "explanation" || result.kind === "recommendation"
-                  ? "Why"
-                  : "Action",
+              : result.kind === "schedule_update"
+                ? "Schedule"
+                : result.kind === "navigation"
+                  ? "Route"
+                  : result.kind === "priority_explanation" ||
+                      result.kind === "recommendation" ||
+                      result.kind === "workspace_focus"
+                    ? "Why"
+                    : "Action",
         summary:
           "receipt" in result && result.receipt
             ? `${result.receipt.title}: ${result.message}`
@@ -1033,5 +1049,296 @@ export function getHomeBriefingItems(results: CommandResult[]): HomeBriefingItem
       } satisfies HomeBriefingItem,
     ];
   });
+}
+
+export function getRecentAssistantActivity(
+  activity: AssistantActivityEvent[],
+  limit = 8,
+): AssistantActivityEvent[] {
+  return activity.slice(0, limit);
+}
+
+export function getDashboardUpdateSummary(
+  activity: AssistantActivityEvent[],
+): { lastAt: string; addedCount: number; removedCount: number } | null {
+  const entry = activity.find((event) => event.resultKind === "dashboard_update");
+  if (!entry) {
+    return null;
+  }
+
+  const addedLine = entry.receiptLines.find((line) => line.toLowerCase().startsWith("added:"));
+  const removedLine = entry.receiptLines.find((line) => line.toLowerCase().startsWith("removed:"));
+  const parseCount = (line?: string) =>
+    line ? line.split(":")[1]?.split(",").filter(Boolean).length ?? 0 : 0;
+
+  return {
+    lastAt: entry.at,
+    addedCount: parseCount(addedLine),
+    removedCount: parseCount(removedLine),
+  };
+}
+
+export function getWeeklyPlanSummary(plan: ActiveWeeklyPlan | null) {
+  if (!plan) {
+    return null;
+  }
+
+  const totalMinutes = plan.steps.reduce((sum, step) => sum + step.minutes, 0);
+  const appliedCount = plan.steps.filter((step) => step.applied).length;
+  const totalSteps = plan.steps.length;
+  const scheduledDays = new Set(
+    plan.steps.map((step) => step.scheduledFor.slice(0, 10)),
+  );
+  const nextStep = plan.steps.find((step) => !step.applied);
+
+  return {
+    totalMinutes,
+    appliedCount,
+    totalSteps,
+    spanDays: scheduledDays.size,
+    nextStep,
+  };
+}
+
+export function getScheduleRebalanceSummary(suggestions: ScheduleSuggestion[]) {
+  const pending = suggestions.filter((entry) => entry.status === "pending");
+  const applied = suggestions.filter((entry) => entry.status === "applied");
+  const netShiftedMinutes = applied.reduce(
+    (sum, entry) => sum + (entry.estimatedMinutes ?? 0),
+    0,
+  );
+  const affectedDays = Array.from(
+    new Set(suggestions.flatMap((entry) => entry.affectedDays)),
+  );
+
+  return {
+    pendingCount: pending.length,
+    appliedCount: applied.length,
+    netShiftedMinutes,
+    affectedDays,
+  };
+}
+
+export function getFocusedWorkspaceStatus(
+  focusedWorkspaceId: string | null,
+  workspaces: Workspace[],
+  tasks: Task[],
+): {
+  workspace: Workspace | null;
+  focusedTaskCount: number;
+  homeRankingImpact: "promoted" | "neutral";
+  surfaces: AssistantActivitySurface[];
+} | null {
+  if (!focusedWorkspaceId) {
+    return null;
+  }
+
+  const workspace = workspaces.find((entry) => entry.id === focusedWorkspaceId) ?? null;
+  if (!workspace) {
+    return null;
+  }
+
+  const focusedTaskCount = tasks.filter(
+    (task) =>
+      task.primaryWorkspaceId === focusedWorkspaceId ||
+      task.linkedWorkspaceIds.includes(focusedWorkspaceId),
+  ).length;
+
+  return {
+    workspace,
+    focusedTaskCount,
+    homeRankingImpact: focusedTaskCount > 0 ? "promoted" : "neutral",
+    surfaces: ["workspaces", "home", "assistant"],
+  };
+}
+
+const SUGGESTION_ID_PREFIX = "suggestion";
+
+function suggestionId(seed: string, index: number) {
+  return `${SUGGESTION_ID_PREFIX}-${seed}-${index}`;
+}
+
+export function computeScheduleRebalance(
+  data: Pick<LifeOsSnapshot, "tasks" | "workspaces" | "constraintProfile" | "events">,
+  referenceDate: Date = new Date(),
+): ScheduleSuggestion[] {
+  const start = startOfWeek(referenceDate, { weekStartsOn: 1 });
+  const days = eachDayOfInterval({ start, end: addDays(start, 6) });
+  const agenda = getAgendaGroups(data, referenceDate);
+  const taskViews = getIncompleteTasks(data);
+
+  const dayMinutes = new Map<string, number>();
+  days.forEach((day) => {
+    const key = format(day, "yyyy-MM-dd");
+    const match = agenda.find((entry) => entry.key === key);
+    dayMinutes.set(key, match ? Math.round((match.loadPercent / 100) * 480) : 0);
+  });
+
+  const candidates: TaskView[] = taskViews
+    .filter((task) => {
+      const taskDate = getTaskDate(task);
+      return Boolean(taskDate);
+    })
+    .sort((a, b) => {
+      const priorityDiff = PRIORITY_WEIGHTS[b.priority] - PRIORITY_WEIGHTS[a.priority];
+      if (priorityDiff !== 0) {
+        return priorityDiff;
+      }
+      return compareTasksByUrgency(a, b);
+    });
+
+  const suggestions: ScheduleSuggestion[] = [];
+  const generatedAt = referenceDate.toISOString();
+
+  for (const task of candidates) {
+    if (suggestions.length >= 5) {
+      break;
+    }
+
+    const taskDate = getTaskDate(task);
+    if (!taskDate) {
+      continue;
+    }
+
+    const taskDayKey = format(taskDate, "yyyy-MM-dd");
+    const currentLoad = dayMinutes.get(taskDayKey) ?? 0;
+    const isHeavyDay = currentLoad >= 360;
+    const estimatedMinutes = task.estimatedMinutes ?? 45;
+
+    if (isHeavyDay) {
+      const lighterDay = days.find((day) => {
+        const key = format(day, "yyyy-MM-dd");
+        if (key === taskDayKey) return false;
+        if (isBefore(day, startOfDay(referenceDate))) return false;
+        const load = dayMinutes.get(key) ?? 0;
+        return load + estimatedMinutes <= 360;
+      });
+
+      if (lighterDay) {
+        const toKey = format(lighterDay, "yyyy-MM-dd");
+        const toAt = set(lighterDay, {
+          hours: 15,
+          minutes: 0,
+          seconds: 0,
+          milliseconds: 0,
+        }).toISOString();
+
+        suggestions.push({
+          id: suggestionId(task.id, suggestions.length),
+          generatedAt,
+          kind: "shift",
+          taskId: task.id,
+          title: `Shift ${task.title} to ${format(lighterDay, "EEE")}`,
+          reason: `${format(taskDate, "EEE")} is already heavy; ${format(lighterDay, "EEE")} has open room.`,
+          fromAt: task.scheduledAt ?? task.dueAt,
+          toAt,
+          affectedDays: [taskDayKey, toKey],
+          status: "pending",
+          estimatedMinutes,
+        });
+
+        dayMinutes.set(toKey, (dayMinutes.get(toKey) ?? 0) + estimatedMinutes);
+        dayMinutes.set(taskDayKey, Math.max(0, currentLoad - estimatedMinutes));
+        continue;
+      }
+    }
+  }
+
+  // For unscheduled high-priority tasks, suggest insertion on earliest open day
+  const unscheduledHighPriority = taskViews
+    .filter((task) => !getTaskDate(task))
+    .filter((task) => task.priority === "high" || task.priority === "critical")
+    .slice(0, Math.max(0, 5 - suggestions.length));
+
+  for (const task of unscheduledHighPriority) {
+    const estimatedMinutes = task.estimatedMinutes ?? 45;
+    const openDay = days.find((day) => {
+      const key = format(day, "yyyy-MM-dd");
+      if (isBefore(day, startOfDay(referenceDate))) return false;
+      const load = dayMinutes.get(key) ?? 0;
+      return load + estimatedMinutes <= 360;
+    });
+
+    if (openDay) {
+      const toKey = format(openDay, "yyyy-MM-dd");
+      const toAt = set(openDay, {
+        hours: 14,
+        minutes: 0,
+        seconds: 0,
+        milliseconds: 0,
+      }).toISOString();
+
+      suggestions.push({
+        id: suggestionId(task.id, suggestions.length),
+        generatedAt,
+        kind: "insert",
+        taskId: task.id,
+        title: `Schedule ${task.title} on ${format(openDay, "EEE")}`,
+        reason: `High-priority task has no slot yet; ${format(openDay, "EEE")} has an open window.`,
+        toAt,
+        affectedDays: [toKey],
+        status: "pending",
+        estimatedMinutes,
+      });
+
+      dayMinutes.set(toKey, (dayMinutes.get(toKey) ?? 0) + estimatedMinutes);
+    }
+  }
+
+  return suggestions;
+}
+
+export function buildActiveWeeklyPlan(
+  data: Pick<LifeOsSnapshot, "tasks" | "workspaces" | "constraintProfile" | "events">,
+  referenceDate: Date = new Date(),
+  focusedWorkspaceId?: string,
+): ActiveWeeklyPlan {
+  const base = getConstraintAwarePlan(data, focusedWorkspaceId, referenceDate);
+  const start = startOfWeek(referenceDate, { weekStartsOn: 1 });
+  const days = eachDayOfInterval({ start, end: addDays(start, 6) });
+  const agenda = getAgendaGroups(data, referenceDate);
+
+  const dayMinutes = new Map<string, number>();
+  days.forEach((day) => {
+    const key = format(day, "yyyy-MM-dd");
+    const match = agenda.find((entry) => entry.key === key);
+    dayMinutes.set(key, match ? Math.round((match.loadPercent / 100) * 480) : 0);
+  });
+
+  const steps: PlannedStep[] = base.steps.map((step, index) => {
+    const openDay =
+      days.find((day) => {
+        const key = format(day, "yyyy-MM-dd");
+        if (isBefore(day, startOfDay(referenceDate))) return false;
+        const load = dayMinutes.get(key) ?? 0;
+        return load + step.minutes <= 360;
+      }) ?? days[Math.min(index + 1, days.length - 1)] ?? days[0];
+
+    const key = format(openDay, "yyyy-MM-dd");
+    const scheduledFor = set(openDay, {
+      hours: 15,
+      minutes: 0,
+      seconds: 0,
+      milliseconds: 0,
+    }).toISOString();
+
+    dayMinutes.set(key, (dayMinutes.get(key) ?? 0) + step.minutes);
+
+    return {
+      ...step,
+      id: `${step.id}-${index}`,
+      scheduledFor,
+      applied: false,
+    };
+  });
+
+  return {
+    id: `plan-${referenceDate.getTime()}`,
+    generatedAt: referenceDate.toISOString(),
+    horizonDays: 7,
+    title: base.title,
+    summary: base.summary,
+    steps,
+  };
 }
 
