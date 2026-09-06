@@ -4,13 +4,17 @@ from collections.abc import Iterator, Mapping
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Any
+from urllib.parse import quote, urlencode
 
-from fastapi import APIRouter, Depends, Form, Query, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile, status
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from starlette.templating import Jinja2Templates
 
+from semester_ops.application.study import MAX_ASSIGNMENT_DOCUMENT_BYTES
 from semester_ops.web.security import csrf_token, require_csrf, safe_return_path
 from semester_ops.web.services import (
+    AssignmentDocumentUploadCommand,
+    BlockCreateCommand,
     BlockEditCommand,
     MealItemCommand,
     SettingsCommand,
@@ -39,6 +43,7 @@ def render_page(
         request=request,
         csrf_token=csrf_token(request),
         current_path=request.url.path,
+        nav_path=context.get("nav_path", request.url.path),
         flash=request.session.pop("flash", None),
     )
     return templates.TemplateResponse(
@@ -87,6 +92,33 @@ def assignments_page(
     return render_page(request, "assignments.html", services.list_assignments(state))
 
 
+@router.get("/assignments/{assignment_id}", response_class=HTMLResponse, name="assignment_study")
+def assignment_study_page(
+    request: Request,
+    assignment_id: str,
+    services: WebServices = Depends(get_web_services),
+) -> HTMLResponse:
+    return render_page(
+        request,
+        "assignment_study.html",
+        services.get_assignment_study(assignment_id),
+    )
+
+
+@router.get("/assignments/{assignment_id}/documents/{document_id}")
+def download_assignment_document(
+    assignment_id: str,
+    document_id: str,
+    services: WebServices = Depends(get_web_services),
+) -> Response:
+    document = services.get_assignment_document(assignment_id, document_id)
+    return Response(
+        document.content,
+        media_type=document.media_type,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(document.filename)}"},
+    )
+
+
 @router.get("/imports", response_class=HTMLResponse, name="imports")
 def imports_page(
     request: Request,
@@ -112,6 +144,19 @@ def settings_page(
     return render_page(request, "settings.html", services.get_settings_view())
 
 
+@router.get("/blocks/new", response_class=HTMLResponse, name="new_block")
+def new_block_page(
+    request: Request,
+    day: Annotated[date | None, Query()] = None,
+    return_to: Annotated[str | None, Query()] = None,
+    services: WebServices = Depends(get_web_services),
+) -> HTMLResponse:
+    view_data = dict(services.get_new_block(day))
+    view_data["return_to"] = safe_return_path(return_to, "/")
+    view_data["nav_path"] = view_data["return_to"]
+    return render_page(request, "new_block.html", view_data)
+
+
 @router.get("/blocks/{block_id}/edit", response_class=HTMLResponse, name="edit_block")
 def edit_block_page(
     request: Request,
@@ -121,7 +166,67 @@ def edit_block_page(
 ) -> HTMLResponse:
     view_data = dict(services.get_block(block_id))
     view_data["return_to"] = safe_return_path(return_to, "/")
+    view_data["nav_path"] = view_data["return_to"]
     return render_page(request, "edit_block.html", view_data)
+
+
+@router.post("/blocks", dependencies=[Depends(require_csrf)])
+def create_block(
+    request: Request,
+    title: Annotated[str, Form(min_length=1, max_length=160)],
+    planned_start_local: Annotated[datetime, Form()],
+    planned_end_local: Annotated[datetime, Form()],
+    category: Annotated[str, Form(min_length=1, max_length=40)],
+    flexibility: Annotated[str, Form(pattern="^(fixed|flexible|optional)$")],
+    notes: Annotated[str | None, Form(max_length=4000)] = None,
+    project_to_calendar: Annotated[bool, Form()] = False,
+    return_to: Annotated[str | None, Form()] = None,
+    services: WebServices = Depends(get_web_services),
+) -> RedirectResponse:
+    if planned_end_local <= planned_start_local:
+        raise ValueError("End time must be after start time.")
+    services.create_block(
+        BlockCreateCommand(
+            title=title.strip(),
+            planned_start_local=planned_start_local,
+            planned_end_local=planned_end_local,
+            category=category,
+            flexibility=flexibility,
+            notes=notes.strip() if notes else None,
+            project_to_calendar=project_to_calendar,
+        )
+    )
+    set_flash(request, "Schedule block created.")
+    return redirect_back(request, return_to)
+
+
+@router.post("/blocks/{block_id}/duplicate", dependencies=[Depends(require_csrf)])
+def duplicate_block(
+    request: Request,
+    block_id: str,
+    return_to: Annotated[str | None, Form()] = None,
+    services: WebServices = Depends(get_web_services),
+) -> RedirectResponse:
+    safe_return = safe_return_path(return_to, "/")
+    duplicate_id = services.duplicate_block(block_id)
+    set_flash(request, "Independent copy created. Adjust its time and details.")
+    location = f"/blocks/{duplicate_id}/edit?{urlencode({'return_to': safe_return})}"
+    return RedirectResponse(location, status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/blocks/{block_id}/delete", dependencies=[Depends(require_csrf)])
+def delete_block(
+    request: Request,
+    block_id: str,
+    confirmation: Annotated[bool, Form()],
+    return_to: Annotated[str | None, Form()] = None,
+    services: WebServices = Depends(get_web_services),
+) -> RedirectResponse:
+    if not confirmation:
+        raise ValueError("Block removal must be confirmed.")
+    services.delete_block(block_id)
+    set_flash(request, "Schedule block removed.")
+    return redirect_back(request, return_to)
 
 
 @router.post("/blocks/{block_id}/status", dependencies=[Depends(require_csrf)])
@@ -256,6 +361,66 @@ def update_assignment_state(
     )
     set_flash(request, "Assignment updated.")
     return redirect_back(request, return_to, "/assignments")
+
+
+@router.post(
+    "/assignments/{assignment_id}/documents",
+    dependencies=[Depends(require_csrf)],
+)
+async def upload_assignment_document(
+    request: Request,
+    assignment_id: str,
+    document: Annotated[UploadFile, File()],
+    services: WebServices = Depends(get_web_services),
+) -> RedirectResponse:
+    try:
+        content = await document.read(MAX_ASSIGNMENT_DOCUMENT_BYTES + 1)
+    finally:
+        await document.close()
+    services.upload_assignment_document(
+        assignment_id,
+        AssignmentDocumentUploadCommand(
+            filename=document.filename or "",
+            media_type=document.content_type,
+            content=content,
+        ),
+    )
+    set_flash(request, "Document attached and study quiz regenerated.")
+    return RedirectResponse(f"/assignments/{assignment_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post(
+    "/assignments/{assignment_id}/study/regenerate",
+    dependencies=[Depends(require_csrf)],
+)
+def regenerate_assignment_study(
+    request: Request,
+    assignment_id: str,
+    services: WebServices = Depends(get_web_services),
+) -> RedirectResponse:
+    services.regenerate_assignment_study(assignment_id)
+    set_flash(request, "Study guide and quiz regenerated from the attached documents.")
+    return RedirectResponse(f"/assignments/{assignment_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post(
+    "/assignments/{assignment_id}/quiz/check",
+    dependencies=[Depends(require_csrf)],
+    response_class=HTMLResponse,
+)
+async def check_assignment_quiz(
+    request: Request,
+    assignment_id: str,
+    services: WebServices = Depends(get_web_services),
+) -> HTMLResponse:
+    form = await request.form()
+    answers = {
+        key.removeprefix("answer_"): str(value)
+        for key, value in form.items()
+        if key.startswith("answer_")
+    }
+    view_data = services.check_assignment_quiz(assignment_id, answers)
+    return render_page(request, "assignment_study.html", view_data)
 
 
 @router.post("/imports/{draft_id}/approve", dependencies=[Depends(require_csrf)])

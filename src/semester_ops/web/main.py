@@ -4,6 +4,7 @@ import logging
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import uvicorn
 from fastapi import FastAPI, Request, status
@@ -12,7 +13,9 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.responses import PlainTextResponse
 from starlette.templating import Jinja2Templates
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from semester_ops.application.errors import (
     DraftBlockedError,
@@ -21,12 +24,85 @@ from semester_ops.application.errors import (
     StaleRevisionError,
     ValidationError,
 )
+from semester_ops.application.study import MAX_ASSIGNMENT_UPLOAD_REQUEST_BYTES
 from semester_ops.config import Settings, get_settings
 from semester_ops.web.routes import render_page, router
 from semester_ops.web.services import ServiceFactory, WebServiceUnavailable, default_service_factory
 
 logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+
+class AssignmentUploadBodyLimitMiddleware:
+    """Cap assignment multipart bodies before Starlette parses them into memory."""
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        max_body_bytes: int = MAX_ASSIGNMENT_UPLOAD_REQUEST_BYTES,
+    ) -> None:
+        self.app = app
+        self.max_body_bytes = max_body_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if not self._is_assignment_upload(scope):
+            await self.app(scope, receive, send)
+            return
+
+        headers = dict(scope.get("headers", []))
+        declared_length = headers.get(b"content-length")
+        if declared_length is not None:
+            try:
+                if int(declared_length) > self.max_body_bytes:
+                    await self._reject(scope, receive, send)
+                    return
+            except ValueError:
+                pass
+
+        body = bytearray()
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            if message["type"] != "http.request":
+                continue
+            body.extend(message.get("body", b""))
+            if len(body) > self.max_body_bytes:
+                await self._reject(scope, receive, send)
+                return
+            if not message.get("more_body", False):
+                break
+
+        delivered = False
+
+        async def replay_receive() -> Message:
+            nonlocal delivered
+            if delivered:
+                return {"type": "http.request", "body": b"", "more_body": False}
+            delivered = True
+            return {"type": "http.request", "body": bytes(body), "more_body": False}
+
+        await self.app(scope, replay_receive, send)
+
+    @staticmethod
+    def _is_assignment_upload(scope: Scope) -> bool:
+        if scope["type"] != "http" or scope.get("method") != "POST":
+            return False
+        parts = str(scope.get("path", "")).strip("/").split("/")
+        return (
+            len(parts) == 3
+            and parts[0] == "assignments"
+            and bool(parts[1])
+            and parts[2] == "documents"
+        )
+
+    @staticmethod
+    async def _reject(scope: Scope, receive: Receive, send: Send) -> None:
+        response = PlainTextResponse(
+            "Assignment uploads must be 5 MB or smaller.",
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+        )
+        await response(scope, receive, send)
 
 
 def _format_time(value: Any) -> str:
@@ -116,16 +192,22 @@ def create_app(
     app.state.service_factory = service_factory or default_service_factory
     app.state.templates = _configure_templates(active_template_dir)
 
+    public_origin = urlsplit(active_settings.base_url)
+    trusted_hosts = ["127.0.0.1", "localhost", "testserver", "[::1]", "::1"]
+    if public_origin.hostname and public_origin.hostname not in trusted_hosts:
+        trusted_hosts.append(public_origin.hostname)
+
     app.add_middleware(
         SessionMiddleware,
         secret_key=active_settings.secret_key,
         same_site="strict",
-        https_only=False,
+        https_only=public_origin.scheme == "https",
     )
     app.add_middleware(
         TrustedHostMiddleware,
-        allowed_hosts=["127.0.0.1", "localhost", "testserver", "[::1]", "::1"],
+        allowed_hosts=trusted_hosts,
     )
+    app.add_middleware(AssignmentUploadBodyLimitMiddleware)
     app.mount("/static", StaticFiles(directory=str(active_static_dir)), name="static")
     app.include_router(router)
 

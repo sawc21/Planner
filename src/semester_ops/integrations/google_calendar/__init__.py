@@ -3,6 +3,7 @@
 from semester_ops.integrations.google_calendar.gateway import (
     CalendarGateway,
     CalendarPage,
+    GoogleCalendarAccessError,
     GoogleCalendarConfigurationError,
     GoogleCalendarError,
     GoogleCalendarGateway,
@@ -10,6 +11,7 @@ from semester_ops.integrations.google_calendar.gateway import (
     IncrementalRead,
     SyncTokenExpired,
     read_incremental_changes,
+    reauthorizing_gateway_from_oauth_files,
 )
 from semester_ops.integrations.google_calendar.identity import (
     APP_ID,
@@ -43,6 +45,7 @@ __all__ = [
     "CalendarPage",
     "CalendarSyncConflict",
     "CalendarSyncSnapshot",
+    "GoogleCalendarAccessError",
     "GoogleCalendarConfigurationError",
     "GoogleCalendarError",
     "GoogleCalendarGateway",
@@ -60,6 +63,7 @@ __all__ = [
     "google_event_body",
     "ownership_tags",
     "read_incremental_changes",
+    "reauthorizing_gateway_from_oauth_files",
     "reconcile_calendar",
     "remote_event_from_google",
 ]

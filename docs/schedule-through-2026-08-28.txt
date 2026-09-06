@@ -1,0 +1,182 @@
+SEMESTER OPS | 2026-07-29 through 2026-08-28
+Timezone: America/Chicago (Central Time)
+
+Legend:
+  [FIXED]    Keep this time unless work/class changes.
+  [FLEX]     Rearrange when needed.
+  [OPTIONAL] Skip when recovery or school load needs room.
+
+Google Calendar:
+  This file is a manual-edit reference. Semester Ops remains the source of truth.
+  The app's Sync now button will project the current local schedule to the dedicated
+  Semester Ops calendar. The transition-week Work entries below replace the normal
+  Fall work blocks on August 25, 26, and 28.
+
+======================================================================
+REUSABLE PRE-SEMESTER WEEK | 2026-07-29 through 2026-08-23
+======================================================================
+
+Daily
+00:00-08:00 | [FIXED]    | Sleep
+23:00-00:00 | [OPTIONAL] | Wind down and prepare for sleep
+
+Monday
+08:00-09:00 | [FIXED]    | Breakfast and morning setup
+09:00-12:00 | [FLEX]     | Personal project / semester preparation
+12:00-12:40 | [FLEX]     | Lunch
+13:30-14:40 | [FLEX]     | Full-body Lift A
+14:40-15:15 | [FLEX]     | Cooldown and protein snack
+15:15-17:15 | [FLEX]     | Personal project / semester preparation
+17:15-18:30 | [FLEX]     | Cook and eat lemon-Parmesan chicken dinner
+18:30-20:30 | [FLEX]     | Light project work or weekly preparation
+20:30-20:50 | [OPTIONAL] | Guitar
+20:50-23:00 | [OPTIONAL] | Free time, friends, reading, or hobbies
+
+Tuesday
+08:00-08:30 | [FIXED]    | Breakfast and morning setup
+08:30-11:30 | [FLEX]     | Personal project / semester preparation
+11:30-12:15 | [FLEX]     | Lunch
+12:30-17:30 | [FIXED]    | Work
+17:45-18:15 | [OPTIONAL] | Easy conditioning
+18:15-18:30 | [OPTIONAL] | Mobility
+18:30-19:15 | [FLEX]     | Cook and eat beef and broccoli stir-fry
+20:00-22:00 | [FLEX]     | Project work or semester preparation
+22:00-22:20 | [OPTIONAL] | Guitar
+22:20-23:00 | [OPTIONAL] | Relax and prepare for Wednesday
+
+Wednesday
+08:00-08:30 | [FLEX]     | Huevos rancheros and morning setup
+08:30-11:30 | [FLEX]     | Personal project / semester preparation
+11:30-12:15 | [FLEX]     | Mediterranean chicken pita lunch
+12:30-17:30 | [FIXED]    | Work
+17:30-18:00 | [FLEX]     | Snack and decompress
+18:00-19:10 | [FLEX]     | Full-body Lift B
+19:15-20:15 | [FLEX]     | Honey-lime salmon dinner
+20:15-21:45 | [FLEX]     | Project work, coding, or semester preparation
+21:45-22:05 | [OPTIONAL] | Guitar or light stretching
+22:05-23:00 | [OPTIONAL] | Free time
+
+Thursday
+08:00-08:30 | [FIXED]    | Spinach-feta omelet and morning setup
+08:30-12:00 | [FLEX]     | Personal project / semester preparation
+12:00-13:00 | [FLEX]     | Lunch
+13:00-16:00 | [FLEX]     | Personal project, errands, or semester preparation
+16:00-17:30 | [OPTIONAL] | Buffer, errands, or unplanned time
+17:30-18:30 | [FLEX]     | Turkey meatballs, spaghetti, and zucchini dinner
+18:30-21:00 | [OPTIONAL] | Free time or hobbies
+21:00-21:15 | [OPTIONAL] | Mobility
+21:15-22:00 | [FLEX]     | Plan Friday and handle light admin
+22:00-23:00 | [OPTIONAL] | Relax
+
+Friday
+08:00-08:30 | [FLEX]     | Breakfast and morning setup
+08:30-11:30 | [FLEX]     | Personal project / semester preparation
+11:30-12:15 | [FLEX]     | Lunch
+12:30-17:30 | [FIXED]    | Work
+17:30-17:45 | [OPTIONAL] | Protein snack and decompress
+17:45-18:55 | [FLEX]     | Full-body Lift C
+19:00-20:00 | [FLEX]     | Shower, cook shrimp tacos, and eat
+20:00-23:00 | [OPTIONAL] | Friends, social time, guitar, or rest
+
+Saturday
+08:00-08:30 | [FLEX]     | Breakfast and morning setup
+08:30-09:00 | [OPTIONAL] | Mobility and walk
+09:00-12:00 | [FLEX]     | Personal project / semester preparation
+12:00-13:00 | [FLEX]     | Lunch
+13:00-14:00 | [FLEX]     | Chores
+14:00-17:00 | [FLEX]     | Major personal project or semester preparation
+17:00-18:00 | [OPTIONAL] | Buffer or errands
+18:00-18:45 | [FLEX]     | Dinner
+19:00-23:00 | [OPTIONAL] | Friends, hobbies, events, or rest
+
+Sunday
+08:00-08:30 | [FLEX]     | Breakfast and morning setup
+09:00-12:00 | [FLEX]     | Personal project / semester preparation
+12:00-13:00 | [FLEX]     | Lunch
+13:00-13:40 | [OPTIONAL] | Conditioning
+13:40-14:00 | [OPTIONAL] | Mobility
+14:00-17:00 | [FLEX]     | Creative work or semester preparation
+17:00-18:00 | [FLEX]     | Groceries and meal prep
+18:00-18:45 | [FLEX]     | Dinner
+19:00-19:30 | [FLEX]     | Plan the week and check priorities
+19:30-20:00 | [OPTIONAL] | Guitar
+20:00-23:00 | [OPTIONAL] | Free time
+
+======================================================================
+TRANSITION WEEK | 2026-08-24 through 2026-08-28
+======================================================================
+
+Monday, 2026-08-24 (existing Fall plan; unchanged)
+00:00-08:00 | [FIXED]    | Sleep
+08:00-08:30 | [FIXED]    | Southwest breakfast tacos and get ready
+08:30-08:45 | [FIXED]    | Commute to campus
+09:00-09:50 | [FIXED]    | Calculus I
+10:10-12:40 | [FLEX]     | Calculus practice and assignments
+12:40-13:20 | [FLEX]     | Turkey-avocado club wrap lunch
+13:30-14:40 | [FLEX]     | Full-body Lift A
+14:40-15:00 | [FLEX]     | Cooldown, shower, and protein snack
+15:15-17:15 | [FLEX]     | Database Systems or Machine Learning coursework
+17:15-19:00 | [FLEX]     | Cook, eat, and reset after lemon-Parmesan chicken dinner
+19:00-20:30 | [FLEX]     | Cloud Computing or lighter schoolwork
+20:30-20:50 | [OPTIONAL] | Guitar
+20:50-22:30 | [OPTIONAL] | Free time or overflow homework
+22:30-23:00 | [OPTIONAL] | Mobility wind-down
+23:00-07:00 | [FIXED]    | Sleep before early-class morning
+
+Tuesday, 2026-08-25 (transition override)
+07:00-07:45 | [FIXED]    | Breakfast and get ready
+07:45-08:00 | [FIXED]    | Commute to campus
+08:00-09:15 | [FIXED]    | Calculus I
+09:30-10:45 | [FIXED]    | Database Systems
+10:45-11:00 | [FLEX]     | Eat prepacked chicken Caesar wrap
+11:00-12:15 | [FIXED]    | Machine Learning
+12:15-12:30 | [FIXED]    | Commute home
+12:30-17:30 | [FIXED]    | Work | REPLACES normal remote-job block
+17:30-19:00 | [FLEX]     | Cook and eat beef and broccoli stir-fry
+19:00-22:00 | [FLEX]     | Same-day lecture review and coursework
+22:00-22:20 | [OPTIONAL] | Guitar
+22:20-23:30 | [OPTIONAL] | Relax and prepare for Wednesday
+
+Wednesday, 2026-08-26 (transition override)
+00:00-08:00 | [FIXED]    | Sleep
+08:00-08:30 | [FLEX]     | Huevos rancheros and morning setup
+08:30-11:30 | [FLEX]     | Project work, coding, or problem sets
+11:30-12:15 | [FLEX]     | Mediterranean chicken pita lunch
+12:30-17:30 | [FIXED]    | Work | REPLACES software-company work block
+17:30-18:00 | [FLEX]     | Snack and decompress
+18:00-19:10 | [FLEX]     | Full-body Lift B
+19:15-20:15 | [FLEX]     | Honey-lime salmon dinner
+20:15-21:15 | [OPTIONAL] | Free time or overflow coursework
+21:15-21:35 | [OPTIONAL] | Guitar or light stretching
+21:35-22:30 | [OPTIONAL] | Free time
+22:30-23:00 | [OPTIONAL] | Mobility wind-down
+23:00-07:00 | [FIXED]    | Sleep before early-class morning
+
+Thursday, 2026-08-27 (existing Fall plan; unchanged)
+07:00-07:45 | [FIXED]    | Breakfast and get ready
+07:45-08:00 | [FIXED]    | Commute to campus
+08:00-09:15 | [FIXED]    | Calculus I
+09:30-10:45 | [FIXED]    | Database Systems
+11:00-12:15 | [FIXED]    | Machine Learning
+12:15-12:30 | [FIXED]    | Commute home
+12:30-13:00 | [FLEX]     | Steak burrito bowl lunch
+13:00-20:00 | [FIXED]    | Software-company work
+20:00-21:00 | [FLEX]     | Cook and eat turkey meatballs, spaghetti, and zucchini
+21:00-21:15 | [OPTIONAL] | Gentle mobility
+21:15-22:00 | [FLEX]     | Lecture review, organize assignments, and plan Friday
+22:00-23:30 | [OPTIONAL] | Relax
+
+Friday, 2026-08-28 (transition override)
+00:00-08:00 | [FIXED]    | Sleep
+08:00-08:30 | [FLEX]     | Blueberry oat pancakes with Greek yogurt
+08:30-08:45 | [FIXED]    | Commute to campus
+09:00-09:50 | [FIXED]    | Calculus I
+10:10-11:30 | [FLEX]     | Finish high-priority assignments
+11:30-12:15 | [FLEX]     | Buffalo chicken loaded potato lunch
+12:30-17:30 | [FIXED]    | Work | REPLACES normal remote-job block
+17:30-17:45 | [OPTIONAL] | Protein snack and decompress
+17:45-18:55 | [FLEX]     | Full-body Lift C
+19:00-20:00 | [FLEX]     | Shower, cook shrimp tacos, and eat
+20:00-23:30 | [OPTIONAL] | Friends, social time, guitar, or overflow coursework
+
+END OF TRANSITION SCHEDULE

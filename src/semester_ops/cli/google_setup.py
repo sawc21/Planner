@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import sys
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ from semester_ops.db.session import session_scope
 from semester_ops.integrations.google_calendar.gateway import (
     GoogleCalendarError,
     GoogleCalendarGateway,
+    reauthorizing_gateway_from_oauth_files,
 )
 
 
@@ -94,30 +96,74 @@ def setup_google_calendar(
     return GoogleSetupOutcome(created=True)
 
 
+def reauthorize_google_calendar(
+    *,
+    settings: Settings,
+    gateway_factory: GatewayFactory = reauthorizing_gateway_from_oauth_files,
+    session_factory: SessionScopeFactory = session_scope,
+) -> None:
+    """Refresh OAuth without creating or replacing the dedicated calendar."""
+
+    client_secret_file = settings.google_client_secret_file
+    if client_secret_file is None or not client_secret_file.expanduser().is_file():
+        raise GoogleSetupError(
+            "Google OAuth client-secret file is not configured or does not exist."
+        )
+
+    with session_factory() as session:
+        app_settings = session.get(AppSettings, 1)
+        if app_settings is None or app_settings.google_calendar_id is None:
+            raise GoogleSetupError(
+                "Google Calendar is not configured yet; run setup without --reauthorize first."
+            )
+        _require_safe_calendar_id(app_settings.google_calendar_id)
+
+    # The old token and calendar binding remain untouched unless browser OAuth succeeds.
+    gateway_factory(
+        client_secret_file=client_secret_file.expanduser(),
+        token_file=settings.google_token_file.expanduser(),
+    )
+
+
 def run_cli(
     *,
     settings: Settings | None = None,
     gateway_factory: GatewayFactory = GoogleCalendarGateway.from_oauth_files,
+    reauthorization_gateway_factory: GatewayFactory = reauthorizing_gateway_from_oauth_files,
     session_factory: SessionScopeFactory = session_scope,
     stdout: TextIO | None = None,
     stderr: TextIO | None = None,
+    reauthorize: bool = False,
 ) -> int:
     output = stdout or sys.stdout
     error_output = stderr or sys.stderr
     try:
-        outcome = setup_google_calendar(
-            settings=settings or get_settings(),
-            gateway_factory=gateway_factory,
-            session_factory=session_factory,
-        )
+        resolved_settings = settings or get_settings()
+        if reauthorize:
+            reauthorize_google_calendar(
+                settings=resolved_settings,
+                gateway_factory=reauthorization_gateway_factory,
+                session_factory=session_factory,
+            )
+            outcome = GoogleSetupOutcome(created=False)
+        else:
+            outcome = setup_google_calendar(
+                settings=resolved_settings,
+                gateway_factory=gateway_factory,
+                session_factory=session_factory,
+            )
     except GoogleSetupError as exc:
         print(f"Google Calendar setup stopped: {exc}", file=error_output)
         return 2
     except GoogleCalendarError:
-        print(
-            "Google Calendar setup failed. No calendar ID was saved; review OAuth setup and retry.",
-            file=error_output,
+        message = (
+            "Google Calendar reauthorization failed. The existing calendar binding and token "
+            "were not changed."
+            if reauthorize
+            else "Google Calendar setup failed. No calendar ID was saved; "
+            "review OAuth setup and retry."
         )
+        print(message, file=error_output)
         return 1
     except Exception:
         # A CLI boundary must not echo credential-bearing third-party exception details.
@@ -128,7 +174,12 @@ def run_cli(
         )
         return 1
 
-    if outcome.created:
+    if reauthorize:
+        print(
+            "Google Calendar authorization refreshed. Semester Ops - Dev remains configured.",
+            file=output,
+        )
+    elif outcome.created:
         print("Google Calendar setup complete. Semester Ops - Dev is configured.", file=output)
     else:
         print(
@@ -138,8 +189,17 @@ def run_cli(
     return 0
 
 
-def main() -> int:
-    return run_cli()
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Configure the dedicated Semester Ops Google Calendar."
+    )
+    parser.add_argument(
+        "--reauthorize",
+        action="store_true",
+        help="Refresh Google OAuth without creating or replacing the development calendar.",
+    )
+    arguments = parser.parse_args(argv)
+    return run_cli(reauthorize=arguments.reauthorize)
 
 
 def _require_safe_calendar_id(calendar_id: str) -> None:

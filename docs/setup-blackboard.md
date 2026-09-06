@@ -5,20 +5,36 @@ scrape pages, submit work, change due dates, or mark assignments complete in Bla
 
 ## 1. Copy the private calendar URL
 
-In Blackboard, open **Calendar**, choose the calendar-sharing or external-calendar option, and copy
-the generated iCalendar/ICS subscription URL. The exact labels vary by Blackboard Learn version
-and school configuration.
+In modern Blackboard Learn (Ultra):
+
+1. Open the global **Calendar**.
+2. Open **Calendar Settings**.
+3. Open the three-dot menu (`...`) and choose **Share Calendar**.
+4. Copy the private calendar subscription link.
+
+Do not choose **Add Calendar**; that imports another calendar into Blackboard instead of exposing
+your Blackboard deadlines. On older Blackboard installations, look for **Get External Calendar
+Link** under **My Blackboard > Calendar** or **My Institution > Tools > Calendar**. If neither
+sharing option exists, your school may have disabled it; contact the Blackboard administrator.
 
 Treat the URL like a password: anyone holding it may be able to read the calendar. Do not paste it
 into source code, screenshots, issue reports, or logs.
 
 ## 2. Configure Semester Ops
 
-Copy `.env.example` to `.env` and set:
+1. Open Semester Ops **Settings** at `/settings`.
+2. Paste the link into **Private ICS URL**.
+3. Press **Save settings**.
+4. Press **Sync now**.
+5. Confirm the Blackboard connection shows a recent successful sync, then open **Assignments**.
 
-```dotenv
-SEMOPS_BLACKBOARD_ICS_URL=https://your-school.example/private-calendar-token.ics
-```
+Paste the tokenized `https://` subscription URL itself, not a `webcal://` link, a downloaded ICS
+file, the Blackboard sign-in page, or the regular browser address for Calendar. The app validates
+the URL when settings are saved. Changing or clearing it also clears conditional-request cache
+values so the first request to the new feed cannot be mistaken for an unchanged old feed.
+
+`SEMOPS_BLACKBOARD_ICS_URL` in `.env` is only an optional first-run seed for a new database. After
+the app has created its settings record, make connection changes through **Settings**.
 
 The feed client accepts an absolute HTTPS URL, follows redirects, uses a 15-second timeout, caps
 the response at 5 MiB, and supports `ETag` and `Last-Modified` conditional requests. Error messages
@@ -26,7 +42,8 @@ never contain the private URL.
 
 ## 3. Refresh assignments
 
-Press **Sync now**. Blackboard refresh is an independent read-only step:
+Press **Sync now** whenever you want to refresh. Blackboard refresh is an independent read-only
+step:
 
 - events are keyed by `UID` plus `RECURRENCE-ID`;
 - `SEQUENCE`, `DTSTAMP`, and `LAST-MODIFIED` prevent old feed revisions from winning;
@@ -40,7 +57,8 @@ draft creates study blocks. Local completion never writes back to Blackboard.
 
 ## Troubleshooting
 
-- `URL must be an absolute HTTPS URL`: copy the full private subscription link, including `https`.
+- `Blackboard calendar URL must be an absolute HTTPS URL`: copy the full private subscription
+  link, including `https://`, and paste it into **Private ICS URL**.
 - Invalid ICS findings: download the feed once and verify it is a calendar payload rather than a
   sign-in HTML page. Do not attach the private URL to a bug report.
 - Assignments are stale: Blackboard omitted them without an explicit cancellation. Review them
@@ -50,4 +68,4 @@ draft creates study blocks. Local completion never writes back to Blackboard.
 
 Blackboard student calendar reference:
 
-- https://help.blackboard.com/Learn/Student/Ultra/Stay_in_the_Loop/Calendar
+- https://help.anthology.com/blackboard/student/en/getting-started/calendar.html

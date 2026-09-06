@@ -459,6 +459,9 @@ class ImportService:
                     if isinstance(patch_target, BlockTemplate)
                     else self._serialize_occurrence(patch_target)
                 )
+                if isinstance(patch_target, BlockOccurrence) and patch_target.template_id:
+                    before["mark_as_override"] = True
+                    before["override_reason"] = "cancelled by reviewed occurrence patch"
                 self._change(
                     draft,
                     ChangeOperation.CANCEL,
@@ -550,6 +553,19 @@ class ImportService:
                     )
                     if existing_occurrence_target is not None:
                         occurrence_patch_record["id"] = existing_occurrence_target.id
+                        occurrence_patch_record["template_id"] = (
+                            existing_occurrence_target.template_id
+                        )
+                        if existing_occurrence_target.template_id:
+                            # A generated occurrence's date is its recurrence identity. A
+                            # cross-midnight move changes the planned instant, not that identity.
+                            occurrence_patch_record["occurrence_date"] = (
+                                existing_occurrence_target.occurrence_date.isoformat()
+                            )
+                            occurrence_patch_record["mark_as_override"] = True
+                            occurrence_patch_record["override_reason"] = (
+                                "updated by reviewed occurrence patch"
+                            )
                         if "assignment_ids" not in occurrence_value.model_fields_set:
                             self._preserve_assignment_links(
                                 occurrence_patch_record, existing_occurrence_target
@@ -1109,6 +1125,9 @@ class ImportService:
             if occurrence is None:
                 raise NotFoundError("occurrence disappeared before draft application")
             occurrence.cancelled_at = now
+            if change.before_json and change.before_json.get("mark_as_override"):
+                occurrence.is_override = True
+                occurrence.override_reason = change.before_json.get("override_reason")
             occurrence.revision += 1
             return
         if change.after_json is None:
@@ -1200,6 +1219,9 @@ class ImportService:
         occurrence.calendar_projection = data["calendar_projection"]
         occurrence.managed_dataset = data["managed_dataset"]
         occurrence.source_key = data["source_key"]
+        if data.get("mark_as_override"):
+            occurrence.is_override = True
+            occurrence.override_reason = data.get("override_reason")
 
     @staticmethod
     def _replace_occurrence_children(occurrence: BlockOccurrence, data: dict[str, Any]) -> None:

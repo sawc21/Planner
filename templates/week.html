@@ -41,6 +41,7 @@
       {% else %}
       <div class="week-open"><span>Open day</span><small>No planned blocks</small></div>
       {% endfor %}
+      <a class="week-add" href="/blocks/new?day={{ day.date }}&return_to={{ ('/week?anchor=' ~ anchor_date)|urlencode }}">+ New block</a>
     </div>
   </article>
   {% endfor %}

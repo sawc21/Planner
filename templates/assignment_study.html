@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% set page_title = assignment.title %}
+{% set page_id = "assignment-study" %}
+{% set section_label = assignment.course_code|default("ASSIGNMENT") %}
+{% set page_heading = assignment.title %}
+{% set page_subtitle = "Send course files to Codex, review the returned study JSON, and test recall before the deadline." %}
+
+{% block header_actions %}
+<a class="button button-quiet context-back" href="/assignments">Back to assignments</a>
+{% endblock %}
+
+{% block content %}
+<section class="study-assignment-strip">
+  <div><span>DUE</span><strong>{{ assignment.due_label|default("TBD") }}</strong></div>
+  <div><span>COURSE</span><strong>{{ assignment.course_name|default("Unassigned") }}</strong></div>
+  <div><span>SOURCES</span><strong>{% if study and study.sources %}{{ study.sources|length }}{% else %}{{ documents|length }}{% endif %}</strong></div>
+  <div><span>QUIZ</span><strong>{% if study %}{{ study.questions|length }} questions{% else %}Waiting{% endif %}</strong></div>
+</section>
+
+{% if assignment.description %}<p class="assignment-brief">{{ assignment.description }}</p>{% endif %}
+
+<div class="study-layout">
+  <section class="panel study-source-panel">
+    <header class="panel-heading">
+      <span>01</span>
+      <div><h2>Send files to Codex</h2><p>The attachment stays in the AI host; Semester Ops receives validated JSON and provenance.</p></div>
+    </header>
+    <div class="mcp-study-flow">
+      <ol>
+        <li><strong>Attach</strong><span>Send the PDF, DOCX, notes, rubric, or reading in your Codex chat.</span></li>
+        <li><strong>Name</strong><span>Tell Codex this assignment: <code>{{ assignment.id }}</code></span></li>
+        <li><strong>Review</strong><span>Codex returns structured study JSON here through Semester Ops MCP.</span></li>
+      </ol>
+      <small>No document bytes or extracted source text are required in the MCP payload.</small>
+    </div>
+  </section>
+
+  <section class="panel study-guide-panel">
+    <header class="panel-heading">
+      <span>02</span>
+      <div><h2>Study guide</h2><p>{% if study and study.generator == "codex-mcp-v1" %}Validated Codex/MCP result.{% else %}Waiting for a Codex/MCP result.{% endif %}</p></div>
+    </header>
+    {% if study %}
+    <p class="study-summary">{{ study.summary }}</p>
+    {% if study.sources %}
+    <div class="study-provenance">
+      <strong>Built from</strong>
+      {% for source in study.sources %}<span>{{ source.filename }}</span>{% endfor %}
+    </div>
+    {% endif %}
+    <ol class="key-point-list">
+      {% for point in study.key_points %}<li>{{ point }}</li>{% endfor %}
+    </ol>
+    {% if study.assumptions %}
+    <div class="study-assumptions"><strong>Assumptions to review</strong><ul>{% for assumption in study.assumptions %}<li>{{ assumption }}</li>{% endfor %}</ul></div>
+    {% endif %}
+    {% if documents %}<form method="post" action="/assignments/{{ assignment.id }}/study/regenerate">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <button class="button button-secondary button-small" type="submit">Regenerate from sources</button>
+    </form>{% endif %}
+    {% else %}
+    <div class="detail-empty">Your study guide appears here after Codex submits the validated JSON.</div>
+    {% endif %}
+  </section>
+</div>
+
+<section class="panel quiz-panel">
+  <header class="quiz-heading">
+    <div><span>03 / ACTIVE RECALL</span><h2>Assignment quiz</h2></div>
+    {% if quiz_result %}<strong class="quiz-score">{{ quiz_result.correct_count }}/{{ quiz_result.question_count }} / {{ quiz_result.percent }}%</strong>{% endif %}
+  </header>
+  {% if study %}
+  <form method="post" action="/assignments/{{ assignment.id }}/quiz/check" class="quiz-form">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    {% for question in study.questions %}
+    <fieldset class="quiz-question {% if question.feedback %}is-{{ 'correct' if question.feedback.correct else 'incorrect' }}{% endif %}">
+      <legend><span>Q{{ "%02d"|format(loop.index) }}</span>{{ question.prompt }}</legend>
+      <div class="quiz-choices">
+        {% for choice in question.choices %}
+        <label>
+          <input type="radio" name="answer_{{ question.id }}" value="{{ choice }}" {% if question.feedback and question.feedback.selected == choice %}checked{% endif %}>
+          <span>{{ choice }}</span>
+        </label>
+        {% endfor %}
+      </div>
+      {% if question.feedback %}
+      <div class="quiz-feedback" role="status">
+        <strong>{{ "Correct" if question.feedback.correct else "Review this one" }}</strong>
+        <p>Answer: {{ question.feedback.correct_answer }}. {{ question.feedback.explanation }}</p>
+      </div>
+      {% else %}
+      <small class="quiz-source">Source / {{ question.source_filename }}</small>
+      {% endif %}
+    </fieldset>
+    {% endfor %}
+    <div class="quiz-submit">
+      <span>Submit anytime to check selected answers and reveal feedback.</span>
+      <button class="button button-primary" type="submit">Check answers</button>
+    </div>
+  </form>
+  {% else %}
+  <div class="empty-state compact"><h2>No quiz yet</h2><p>Upload a readable source document to generate assignment-specific practice questions.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

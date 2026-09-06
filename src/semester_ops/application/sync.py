@@ -41,6 +41,8 @@ from semester_ops.integrations.blackboard import (
 from semester_ops.integrations.google_calendar import (
     CalendarGateway,
     CalendarSyncSnapshot,
+    GoogleCalendarAccessError,
+    GoogleCalendarConfigurationError,
     LocalCalendarProjection,
     RemoteCalendarEvent,
     RemoteMutation,
@@ -58,10 +60,19 @@ SessionFactory = Callable[[], Session]
 class ConnectorSyncError(RuntimeError):
     """A connector failure with a deliberately non-secret user-facing message."""
 
-    def __init__(self, code: str, public_message: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        public_message: str,
+        *,
+        category: str = "unexpected",
+        recovery: str = "Try synchronization again.",
+    ) -> None:
         super().__init__(public_message)
         self.code = code
         self.public_message = public_message
+        self.category = category
+        self.recovery = recovery
 
 
 @dataclass(frozen=True, slots=True)
@@ -359,14 +370,35 @@ class BlackboardAssignmentSync:
 class GoogleCalendarProjectionSync:
     connector = SyncConnector.GOOGLE
 
-    def __init__(self, gateway_factory: Callable[[], CalendarGateway]) -> None:
+    def __init__(
+        self,
+        gateway_factory: Callable[[], CalendarGateway],
+        *,
+        remote_mutation_limit: int = 50,
+        initial_remote_mutation_limit: int | None = None,
+    ) -> None:
+        if not 1 <= remote_mutation_limit <= 250:
+            raise ValueError("remote_mutation_limit must be between 1 and 250")
+        if initial_remote_mutation_limit is not None and not (
+            1 <= initial_remote_mutation_limit <= remote_mutation_limit
+        ):
+            raise ValueError(
+                "initial_remote_mutation_limit must be between 1 and remote_mutation_limit"
+            )
         self._gateway_factory = gateway_factory
+        self._remote_mutation_limit = remote_mutation_limit
+        self._initial_remote_mutation_limit = initial_remote_mutation_limit
 
     def synchronize(self, session: Session, *, run_id: str) -> ConnectorSyncOutcome:
         settings = get_or_create_settings(session)
         calendar_id = settings.google_calendar_id
         if not calendar_id:
-            raise ConnectorSyncError("not_configured", "Google Calendar is not configured")
+            raise ConnectorSyncError(
+                "not_configured",
+                "Google Calendar is not configured.",
+                category="setup",
+                recovery="Run the Google setup command.",
+            )
 
         state = _get_or_create_source_state(session, self.connector, calendar_id)
         previous_sync_token = state.sync_token
@@ -378,10 +410,28 @@ class GoogleCalendarProjectionSync:
                 calendar_id,
                 sync_token=state.sync_token,
             )
+        except GoogleCalendarAccessError as exc:
+            raise _google_connector_error(exc) from exc
+        except GoogleCalendarConfigurationError as exc:
+            raise ConnectorSyncError(
+                "oauth_required",
+                "Google Calendar authorization is not configured.",
+                category="setup",
+                recovery="Run the Google setup command.",
+            ) from exc
+        except (ConnectionError, OSError, TimeoutError) as exc:
+            raise ConnectorSyncError(
+                "calendar_temporarily_unavailable",
+                "Google Calendar could not be reached.",
+                category="network",
+                recovery="Check the network connection, then press Sync now again.",
+            ) from exc
         except Exception as exc:
             raise ConnectorSyncError(
                 "calendar_read_failed",
-                "Google Calendar could not be read",
+                "Google Calendar could not be read.",
+                category="unexpected",
+                recovery=("Run Google setup with --reauthorize, then press Sync now again."),
             ) from exc
 
         occurrences = tuple(session.scalars(select(BlockOccurrence)))
@@ -502,14 +552,45 @@ class GoogleCalendarProjectionSync:
                     projection=projection,
                 )
 
+        previous_metadata = dict(state.metadata_json or {})
+        previous_cursor = previous_metadata.get("remote_mutation_cursor")
+        if not isinstance(previous_cursor, str):
+            previous_cursor = None
+        eligible_remote_mutations = [
+            mutation
+            for mutation in remote_mutations
+            if mutation.occurrence_id not in failed_pull_ids
+        ]
+        ordered_remote_mutations = _rotate_remote_mutations(
+            eligible_remote_mutations,
+            cursor=previous_cursor,
+        )
+        initial_smoke_batch = (
+            self._initial_remote_mutation_limit is not None
+            and not bool(previous_metadata.get("initial_smoke_attempted"))
+            and bool(ordered_remote_mutations)
+        )
+        active_mutation_limit = (
+            self._initial_remote_mutation_limit
+            if initial_smoke_batch
+            else self._remote_mutation_limit
+        )
+        if active_mutation_limit is None:  # Narrowed by initial_smoke_batch above.
+            active_mutation_limit = self._remote_mutation_limit
+        planned_mutation_count = len(ordered_remote_mutations)
+        selected_remote_mutations = ordered_remote_mutations[:active_mutation_limit]
+
         created_ids: set[str] = set()
         updated_ids: set[str] = set(pulled_ids)
         deleted_count = 0
         external_writes_succeeded = 0
         remotely_written_ids: set[str] = set()
-        for remote_mutation in remote_mutations:
-            if remote_mutation.occurrence_id in failed_pull_ids:
-                continue
+        attempted_mutation_count = 0
+        last_attempted_cursor: str | None = None
+        connector_write_error: ConnectorSyncError | None = None
+        for remote_mutation in selected_remote_mutations:
+            attempted_mutation_count += 1
+            last_attempted_cursor = _remote_mutation_cursor(remote_mutation)
             link = links_by_occurrence.get(remote_mutation.occurrence_id)
             if remote_mutation.kind is RemoteMutationKind.DELETE:
                 try:
@@ -531,6 +612,9 @@ class GoogleCalendarProjectionSync:
                             error=exc,
                         )
                     )
+                    connector_write_error = _connector_wide_google_write_error(exc)
+                    if connector_write_error is not None:
+                        break
                     continue
                 try:
                     with session.begin_nested():
@@ -580,6 +664,9 @@ class GoogleCalendarProjectionSync:
                         error=exc,
                     )
                 )
+                connector_write_error = _connector_wide_google_write_error(exc)
+                if connector_write_error is not None:
+                    break
                 continue
 
             creating_link = link is None
@@ -629,6 +716,12 @@ class GoogleCalendarProjectionSync:
                         external_write_succeeded=True,
                     )
                 )
+
+        deferred_mutation_count = max(
+            planned_mutation_count - attempted_mutation_count,
+            0,
+        )
+        continuation_required = deferred_mutation_count > 0
 
         for local_mutation in plan.local_time_mutations:
             if local_mutation.occurrence_id not in pulled_ids:
@@ -693,25 +786,56 @@ class GoogleCalendarProjectionSync:
                 )
 
         finished_at = utc_now()
-        if mutation_failures:
+        retry_required = bool(mutation_failures or continuation_required)
+        if retry_required:
             # Retain a usable token so failed item changes are replayed. An expired
-            # token cannot be retained; force another full scan instead.
+            # token cannot be retained; force another full scan instead. Deferred
+            # mutations deliberately replay the same source window until drained.
             state.sync_token = None if incremental.reset_from_full_scan else previous_sync_token
         else:
             state.sync_token = incremental.next_sync_token
-        state.last_success_at = finished_at
-        state.metadata_json = {
+        status = (
+            SyncStatus.PARTIAL
+            if (
+                plan.conflicts
+                or quarantined_occurrence_ids
+                or mutation_failures
+                or continuation_required
+            )
+            else SyncStatus.SUCCEEDED
+        )
+        if status is SyncStatus.SUCCEEDED:
+            state.last_success_at = finished_at
+
+        next_metadata = {
+            **previous_metadata,
             "full_scan": incremental.reset_from_full_scan,
             "ignored_remote_events": len(plan.ignored_remote_event_ids),
-            "retry_required": bool(mutation_failures),
+            "remote_mutation_limit": active_mutation_limit,
+            "remote_mutations_planned": planned_mutation_count,
+            "remote_mutations_attempted": attempted_mutation_count,
+            "remote_mutations_deferred": deferred_mutation_count,
+            "continuation_required": continuation_required,
+            "retry_required": retry_required,
         }
+        if self._initial_remote_mutation_limit is not None:
+            next_metadata["initial_smoke_attempted"] = bool(
+                previous_metadata.get("initial_smoke_attempted")
+                or (initial_smoke_batch and attempted_mutation_count)
+            )
+        if retry_required and last_attempted_cursor is not None:
+            next_metadata["remote_mutation_cursor"] = last_attempted_cursor
+        elif not retry_required:
+            next_metadata.pop("remote_mutation_cursor", None)
+        state.metadata_json = next_metadata
         session.flush()
+        connector_error_details = (
+            _safe_error_details(self.connector, connector_write_error)
+            if connector_write_error is not None
+            else {}
+        )
         return ConnectorSyncOutcome(
-            status=(
-                SyncStatus.PARTIAL
-                if plan.conflicts or quarantined_occurrence_ids or mutation_failures
-                else SyncStatus.SUCCEEDED
-            ),
+            status=status,
             created_count=len(created_ids),
             updated_count=len(updated_ids),
             deleted_count=deleted_count,
@@ -724,7 +848,13 @@ class GoogleCalendarProjectionSync:
                 "quarantined_conflicts": len(quarantined_occurrence_ids),
                 "external_writes_succeeded": external_writes_succeeded,
                 "failed_mutations": mutation_failures,
-                "retry_required": bool(mutation_failures),
+                "remote_mutation_limit": active_mutation_limit,
+                "remote_mutations_planned": planned_mutation_count,
+                "remote_mutations_attempted": attempted_mutation_count,
+                "remote_mutations_deferred": deferred_mutation_count,
+                "continuation_required": continuation_required,
+                "retry_required": retry_required,
+                **connector_error_details,
             },
         )
 
@@ -738,7 +868,12 @@ def _required_run(session: Session, run_id: str) -> SyncRun:
 
 def _safe_error_details(connector: SyncConnector, error: Exception) -> dict[str, Any]:
     if isinstance(error, ConnectorSyncError):
-        return {"error_code": error.code, "message": error.public_message}
+        return {
+            "error_code": error.code,
+            "message": error.public_message,
+            "category": error.category,
+            "recovery": error.recovery,
+        }
     return {
         "error_code": type(error).__name__,
         "message": f"{connector.value.title()} synchronization failed",
@@ -754,16 +889,143 @@ def _safe_mutation_failure(
     error: Exception,
     external_write_succeeded: bool = False,
 ) -> dict[str, Any]:
-    return {
+    details: dict[str, Any] = {
         "operation": operation,
         "occurrence_id": _safe_sync_identity(occurrence_id),
         "event_id": _safe_sync_identity(event_id),
         "stage": stage,
         "error_code": (
-            "integrity_collision" if isinstance(error, IntegrityError) else type(error).__name__
+            error.code
+            if isinstance(error, GoogleCalendarAccessError)
+            else (
+                "integrity_collision" if isinstance(error, IntegrityError) else type(error).__name__
+            )
         ),
         "external_write_succeeded": external_write_succeeded,
     }
+    if isinstance(error, GoogleCalendarAccessError):
+        connector_error = _google_connector_error(error)
+        details["category"] = connector_error.category
+        details["recovery"] = connector_error.recovery
+    return details
+
+
+def _google_connector_error(error: GoogleCalendarAccessError) -> ConnectorSyncError:
+    if error.code in {"oauth_required", "oauth_refresh_failed"}:
+        return ConnectorSyncError(
+            error.code,
+            error.public_message,
+            category="authorization",
+            recovery=(
+                "Run .\\.venv\\Scripts\\semester-ops-google-setup.exe --reauthorize, "
+                "then press Sync now again."
+            ),
+        )
+    if error.code == "calendar_permission_denied":
+        return ConnectorSyncError(
+            error.code,
+            error.public_message,
+            category="calendar_access",
+            recovery=(
+                "Run .\\.venv\\Scripts\\semester-ops-google-setup.exe --reauthorize, "
+                "then press Sync now again."
+            ),
+        )
+    if error.code == "calendar_not_found":
+        return ConnectorSyncError(
+            error.code,
+            error.public_message,
+            category="calendar_access",
+            recovery=(
+                "Restore the saved development calendar or repair its local calendar "
+                "binding before syncing again."
+            ),
+        )
+    if error.code == "calendar_rate_limited":
+        return ConnectorSyncError(
+            error.code,
+            error.public_message,
+            category="rate_limit",
+            recovery="Wait briefly, then press Sync now again.",
+        )
+    if error.code == "calendar_temporarily_unavailable":
+        return ConnectorSyncError(
+            error.code,
+            error.public_message,
+            category="network",
+            recovery="Check the network connection, then press Sync now again.",
+        )
+    return ConnectorSyncError(
+        error.code,
+        error.public_message,
+        category="unexpected",
+        recovery="Press Sync now again. Reauthorize Google if the failure repeats.",
+    )
+
+
+def _connector_wide_google_write_error(error: Exception) -> ConnectorSyncError | None:
+    if isinstance(error, GoogleCalendarAccessError):
+        return _google_connector_error(error)
+    if isinstance(error, GoogleCalendarConfigurationError):
+        return ConnectorSyncError(
+            "oauth_required",
+            "Google Calendar authorization is not configured.",
+            category="setup",
+            recovery="Run the Google setup command, then press Sync now again.",
+        )
+    if isinstance(error, (ConnectionError, OSError, TimeoutError)):
+        return ConnectorSyncError(
+            "calendar_temporarily_unavailable",
+            "Google Calendar could not be reached.",
+            category="network",
+            recovery="Check the network connection, then press Sync now again.",
+        )
+    return None
+
+
+def _remote_mutation_cursor(mutation: RemoteMutation) -> str:
+    priority = "0" if mutation.kind is RemoteMutationKind.DELETE else "1"
+    return f"{priority}:{mutation.occurrence_id}"
+
+
+def _rotate_remote_mutations(
+    mutations: Iterable[RemoteMutation],
+    *,
+    cursor: str | None,
+) -> list[RemoteMutation]:
+    values = tuple(mutations)
+    delete_cursor = cursor if cursor is not None and cursor.startswith("0:") else None
+    upsert_cursor = cursor if cursor is not None and cursor.startswith("1:") else None
+    deletes = _rotate_remote_mutation_group(
+        (mutation for mutation in values if mutation.kind is RemoteMutationKind.DELETE),
+        cursor=delete_cursor,
+    )
+    upserts = _rotate_remote_mutation_group(
+        (mutation for mutation in values if mutation.kind is RemoteMutationKind.UPSERT),
+        cursor=upsert_cursor,
+    )
+    return [*deletes, *upserts]
+
+
+def _rotate_remote_mutation_group(
+    mutations: Iterable[RemoteMutation],
+    *,
+    cursor: str | None,
+) -> list[RemoteMutation]:
+    ordered = sorted(mutations, key=_remote_mutation_cursor)
+    if not ordered or cursor is None:
+        return ordered
+    keys = [_remote_mutation_cursor(mutation) for mutation in ordered]
+    try:
+        start = keys.index(cursor) + 1
+    except ValueError:
+        start = next(
+            (index for index, key in enumerate(keys) if key > cursor),
+            0,
+        )
+    if start >= len(ordered):
+        start = 0
+    return [*ordered[start:], *ordered[:start]]
 
 
 def _safe_sync_identity(value: str) -> str:

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Semester Ops Study"
+  short_description: "Turn course documents into assignment quizzes"
+  default_prompt: "Use $semester-ops-study to turn these documents into a study guide and quiz for my Semester Ops assignment."

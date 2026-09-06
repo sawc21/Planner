@@ -14,6 +14,17 @@ type ViewData = dict[str, Any]
 
 
 @dataclass(frozen=True, slots=True)
+class BlockCreateCommand:
+    title: str
+    planned_start_local: datetime
+    planned_end_local: datetime
+    category: str
+    flexibility: str
+    notes: str | None
+    project_to_calendar: bool
+
+
+@dataclass(frozen=True, slots=True)
 class BlockEditCommand:
     title: str
     planned_start_local: datetime
@@ -35,6 +46,20 @@ class WorkoutSetCommand:
     completed: bool
     actual_reps: int | None
     actual_weight: Decimal | None
+
+
+@dataclass(frozen=True, slots=True)
+class AssignmentDocumentUploadCommand:
+    filename: str
+    media_type: str | None
+    content: bytes
+
+
+@dataclass(frozen=True, slots=True)
+class AssignmentDocumentDownload:
+    filename: str
+    media_type: str
+    content: bytes
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,13 +88,23 @@ class WebServices(Protocol):
 
     def list_assignments(self, state: str | None = None) -> ViewData: ...
 
+    def get_assignment_study(self, assignment_id: str) -> ViewData: ...
+
     def list_imports(self) -> ViewData: ...
 
     def get_import(self, draft_id: str) -> ViewData: ...
 
     def get_settings_view(self) -> ViewData: ...
 
+    def get_new_block(self, day: date | None = None) -> ViewData: ...
+
     def get_block(self, block_id: str) -> ViewData: ...
+
+    def create_block(self, command: BlockCreateCommand) -> str: ...
+
+    def duplicate_block(self, block_id: str) -> str: ...
+
+    def delete_block(self, block_id: str) -> None: ...
 
     def set_block_status(self, block_id: str, action: str) -> Mapping[str, Any] | None: ...
 
@@ -90,6 +125,26 @@ class WebServices(Protocol):
         state: str,
         estimated_minutes: int | None,
     ) -> None: ...
+
+    def upload_assignment_document(
+        self,
+        assignment_id: str,
+        command: AssignmentDocumentUploadCommand,
+    ) -> None: ...
+
+    def get_assignment_document(
+        self,
+        assignment_id: str,
+        document_id: str,
+    ) -> AssignmentDocumentDownload: ...
+
+    def regenerate_assignment_study(self, assignment_id: str) -> None: ...
+
+    def check_assignment_quiz(
+        self,
+        assignment_id: str,
+        answers: Mapping[str, str],
+    ) -> ViewData: ...
 
     def approve_import(self, draft_id: str, *, allow_warnings: bool) -> Mapping[str, Any]: ...
 

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "partials/block_form.html" import block_form %}
+{% set page_title = "New block" %}
+{% set page_id = "edit-block" %}
+{% set section_label = "DIRECT SCHEDULE CONTROL" %}
+{% set page_heading = "Create schedule block" %}
+{% set page_subtitle = "Add one independent block now; use reviewed imports for recurring-series changes." %}
+
+{% block header_actions %}
+<a class="button button-secondary context-back" href="{{ return_to|default('/') }}" aria-label="Back to calendar">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+  <span>Back to calendar</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="edit-layout">
+  {{ block_form(block, categories, timezone, csrf_token, return_to, "/blocks", "Create block", "create") }}
+
+  <aside class="panel audit-card">
+    <span class="panel-code">NEW RECORD</span>
+    <dl>
+      <div><dt>Scope</dt><dd>One occurrence</dd></div>
+      <div><dt>Source</dt><dd>Manual</dd></div>
+      <div><dt>Tracking</dt><dd>Ready</dd></div>
+      <div><dt>Google</dt><dd>On next sync</dd></div>
+    </dl>
+    <p class="muted-copy">After creation, the block appears immediately in Today and Week. It remains editable without changing any recurring template.</p>
+  </aside>
+</div>
+{% endblock %}

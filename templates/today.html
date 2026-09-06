@@ -44,7 +44,10 @@
 <section class="timeline-section">
   <div class="section-heading">
     <div><span>DAY PLAN</span><h2>{{ blocks|length }} scheduled blocks</h2></div>
-    <div class="legend"><span><i class="legend-fixed"></i>Fixed</span><span><i class="legend-flexible"></i>Flexible</span><span><i class="legend-optional"></i>Optional</span></div>
+    <div class="section-actions">
+      <div class="legend"><span><i class="legend-fixed"></i>Fixed</span><span><i class="legend-flexible"></i>Flexible</span><span><i class="legend-optional"></i>Optional</span></div>
+      <a class="button button-primary button-small" href="/blocks/new?day={{ selected_date }}&return_to={{ return_to|urlencode }}">New block</a>
+    </div>
   </div>
 
   {% if current_block %}
@@ -68,8 +71,8 @@
     <div class="empty-state">
       <span class="empty-index">00</span>
       <h2>No blocks planned</h2>
-      <p>This day is intentionally open. Import a schedule through MCP or move a flexible block here from Week.</p>
-      <a class="button button-primary" href="/imports">Review imports</a>
+      <p>This day is intentionally open. Add one block directly or review a larger schedule change through imports.</p>
+      <div class="empty-actions"><a class="button button-primary" href="/blocks/new?day={{ selected_date }}&return_to={{ return_to|urlencode }}">Create block</a><a class="button button-secondary" href="/imports">Review imports</a></div>
     </div>
     {% endfor %}
   </div>

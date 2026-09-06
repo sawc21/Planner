@@ -6,7 +6,12 @@
   });
 
   document.querySelectorAll("form").forEach((form) => {
-    form.addEventListener("submit", () => {
+    form.addEventListener("submit", (event) => {
+      const prompt = form.dataset.confirm;
+      if (prompt && !window.confirm(prompt)) {
+        event.preventDefault();
+        return;
+      }
       form.classList.add("is-submitting");
       form.querySelectorAll("button[type='submit']").forEach((button) => {
         button.setAttribute("aria-disabled", "true");

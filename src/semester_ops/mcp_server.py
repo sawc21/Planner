@@ -23,6 +23,17 @@ class PlannerMcpService(Protocol):
 
     def list_assignment_inbox(self, status: str | None) -> JsonObject: ...
 
+    def get_assignment_study_schema(self) -> JsonObject: ...
+
+    def get_assignment_study(self, assignment_id: str) -> JsonObject: ...
+
+    def submit_assignment_study_set(
+        self,
+        assignment_id: str,
+        payload: JsonObject,
+        idempotency_key: str,
+    ) -> JsonObject: ...
+
     def create_import_draft(
         self,
         payload: JsonObject,
@@ -75,6 +86,34 @@ class McpTools:
             raise ValueError(f"status must be one of: {', '.join(sorted(allowed))}")
         return self._result(self._service_factory().list_assignment_inbox(normalized))
 
+    def get_assignment_study_schema(self) -> JsonObject:
+        """Return the live JSON contract for Codex-generated assignment study material."""
+
+        return self._result(self._service_factory().get_assignment_study_schema())
+
+    def get_assignment_study(self, assignment_id: str) -> JsonObject:
+        """Read one assignment's redacted study guide and source provenance."""
+
+        return self._result(
+            self._service_factory().get_assignment_study(_identifier(assignment_id))
+        )
+
+    def submit_assignment_study_set(
+        self,
+        assignment_id: str,
+        payload: JsonObject,
+        idempotency_key: str,
+    ) -> JsonObject:
+        """Store validated study JSON and provenance; never send raw source content."""
+
+        return self._result(
+            self._service_factory().submit_assignment_study_set(
+                _identifier(assignment_id),
+                payload,
+                _idempotency_key(idempotency_key),
+            )
+        )
+
     def create_import_draft(
         self,
         payload: JsonObject,
@@ -119,8 +158,10 @@ def create_mcp_server(service_factory: ServiceFactory | None = None) -> FastMCP:
     server = FastMCP(
         "Semester Ops",
         instructions=(
-            "Read local planning context and create reviewable drafts only. "
-            "No tool can approve a draft or synchronize an external service."
+            "Keep source attachments in Codex. For assignment study material, first read the "
+            "live study schema, then submit only validated JSON plus filename/type/hash "
+            "provenance. Schedule changes remain reviewable drafts. No tool can approve a "
+            "draft or synchronize an external service."
         ),
     )
 
@@ -141,6 +182,28 @@ def create_mcp_server(service_factory: ServiceFactory | None = None) -> FastMCP:
         """List local read-only Blackboard assignments, optionally filtered by state."""
 
         return tools.list_assignment_inbox(status)
+
+    @server.tool()
+    def get_assignment_study_schema() -> JsonObject:
+        """Return the current JSON schema and privacy rules for assignment study material."""
+
+        return tools.get_assignment_study_schema()
+
+    @server.tool()
+    def get_assignment_study(assignment_id: str) -> JsonObject:
+        """Read a saved study guide without exposing its answer key or raw documents."""
+
+        return tools.get_assignment_study(assignment_id)
+
+    @server.tool()
+    def submit_assignment_study_set(
+        assignment_id: str,
+        payload: JsonObject,
+        idempotency_key: str,
+    ) -> JsonObject:
+        """Save Codex-generated quiz JSON for one assignment and return its review URL."""
+
+        return tools.submit_assignment_study_set(assignment_id, payload, idempotency_key)
 
     @server.tool()
     def create_import_draft(
@@ -187,6 +250,25 @@ class _SessionScopedPlannerService:
         if isinstance(result, dict):
             return result
         raise TypeError("SemesterOpsService.list_assignment_inbox must return JSON data")
+
+    def get_assignment_study_schema(self) -> JsonObject:
+        return self._object("get_assignment_study_schema")
+
+    def get_assignment_study(self, assignment_id: str) -> JsonObject:
+        return self._object("get_assignment_study", assignment_id)
+
+    def submit_assignment_study_set(
+        self,
+        assignment_id: str,
+        payload: JsonObject,
+        idempotency_key: str,
+    ) -> JsonObject:
+        return self._object(
+            "submit_assignment_study_set",
+            assignment_id,
+            payload,
+            idempotency_key,
+        )
 
     def create_import_draft(
         self,
@@ -266,6 +348,15 @@ def _idempotency_key(value: str) -> str:
         raise ValueError("idempotency_key cannot be blank")
     if len(normalized) > 200:
         raise ValueError("idempotency_key cannot exceed 200 characters")
+    return normalized
+
+
+def _identifier(value: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+        raise ValueError("assignment_id cannot be blank")
+    if len(normalized) > 100:
+        raise ValueError("assignment_id cannot exceed 100 characters")
     return normalized
 
 

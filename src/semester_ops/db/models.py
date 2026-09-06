@@ -16,6 +16,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     Text,
@@ -427,6 +428,69 @@ class Assignment(TimestampMixin, Base):
     block_links: Mapped[list[AssignmentBlockLink]] = relationship(
         back_populates="assignment", cascade="all, delete-orphan"
     )
+    documents: Mapped[list[AssignmentDocument]] = relationship(
+        back_populates="assignment",
+        cascade="all, delete-orphan",
+        order_by="AssignmentDocument.created_at",
+    )
+    study_set: Mapped[AssignmentStudySet | None] = relationship(
+        back_populates="assignment",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+
+
+class AssignmentDocument(TimestampMixin, Base):
+    __tablename__ = "assignment_documents"
+    __table_args__ = (
+        UniqueConstraint("assignment_id", "sha256", name="uq_assignment_document_hash"),
+        CheckConstraint("size_bytes > 0", name="ck_assignment_document_size"),
+        CheckConstraint(
+            "page_count IS NULL OR page_count > 0",
+            name="ck_assignment_document_pages",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    assignment_id: Mapped[str] = mapped_column(
+        ForeignKey("assignments.id", ondelete="CASCADE"), index=True
+    )
+    original_filename: Mapped[str] = mapped_column(String(255))
+    media_type: Mapped[str] = mapped_column(String(100))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+    content_bytes: Mapped[bytes] = mapped_column(LargeBinary)
+    extracted_text: Mapped[str] = mapped_column(Text)
+    extracted_character_count: Mapped[int] = mapped_column(Integer)
+    page_count: Mapped[int | None] = mapped_column(Integer)
+    is_truncated: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    assignment: Mapped[Assignment] = relationship(back_populates="documents")
+
+
+class AssignmentStudySet(TimestampMixin, Base):
+    __tablename__ = "assignment_study_sets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    assignment_id: Mapped[str] = mapped_column(
+        ForeignKey("assignments.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    schema_version: Mapped[str] = mapped_column(String(20), default="1.0")
+    generator: Mapped[str] = mapped_column(String(100), default="local-deterministic-v1")
+    source_digest: Mapped[str] = mapped_column(String(64))
+    source_metadata_json: Mapped[list[dict[str, Any]]] = mapped_column(
+        MutableList.as_mutable(JSON), default=list
+    )
+    summary: Mapped[str] = mapped_column(Text)
+    key_points_json: Mapped[list[str]] = mapped_column(MutableList.as_mutable(JSON), default=list)
+    questions_json: Mapped[list[dict[str, Any]]] = mapped_column(
+        MutableList.as_mutable(JSON), default=list
+    )
+    assumptions_json: Mapped[list[str]] = mapped_column(MutableList.as_mutable(JSON), default=list)
+    payload_digest: Mapped[str | None] = mapped_column(String(64))
+    generated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utc_now)
+
+    assignment: Mapped[Assignment] = relationship(back_populates="study_set")
 
 
 class AssignmentBlockLink(Base):

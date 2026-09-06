@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 from semester_ops.application.common import get_or_create_settings
 from semester_ops.application.errors import StaleRevisionError
 from semester_ops.application.imports import ImportService
+from semester_ops.application.recurrence import RecurrenceService
 from semester_ops.application.tracking import TrackingService
 from semester_ops.db.base import Base
 from semester_ops.db.models import (
@@ -186,6 +187,191 @@ def test_moving_an_existing_fixed_occurrence_blocks_the_draft(
 
     assert draft.status is DraftStatus.BLOCKED
     assert any(issue.code == "fixed_occurrence_move" and issue.blocking for issue in draft.issues)
+
+
+def test_direct_occurrence_update_becomes_a_durable_template_override(
+    session: Session, semester: Semester
+) -> None:
+    template = BlockTemplate(
+        semester=semester,
+        title="Study routine",
+        weekdays=[0],
+        local_start_time=time(7),
+        duration_minutes=60,
+        effective_start_date=date(2026, 8, 24),
+        effective_end_date=date(2026, 8, 24),
+        managed_dataset="planning.schedule",
+        source_key="study-routine",
+    )
+    occurrence = stored_occurrence(
+        semester,
+        template=template,
+        managed_dataset="planning.schedule",
+        source_key="template:study-routine:2026-08-24",
+    )
+    session.add_all((template, occurrence))
+    session.flush()
+
+    service = ImportService(session)
+    draft = service.create_draft(
+        patch_payload(
+            semester,
+            managed_dataset="planning.schedule",
+            operations=[
+                {
+                    "operation": "update",
+                    "entity_type": "occurrence",
+                    "target_source_key": occurrence.source_key,
+                    "value": occurrence_value(
+                        source_key=occurrence.source_key or "missing",
+                        start_time="08:00:00",
+                    ),
+                }
+            ],
+            scope_end=date(2026, 8, 24),
+        )
+    )
+
+    assert draft.status is DraftStatus.READY
+    change = next(
+        change for change in draft.changes if change.entity_type is ImportEntityType.OCCURRENCE
+    )
+    assert change.after_json is not None
+    assert change.after_json["template_id"] == template.id
+    assert change.after_json["mark_as_override"] is True
+
+    service.apply_draft(draft.id)
+
+    assert occurrence.template_id == template.id
+    assert occurrence.is_override is True
+    assert occurrence.override_reason == "updated by reviewed occurrence patch"
+    assert occurrence.planned_start_utc == datetime(2026, 8, 24, 13, tzinfo=UTC)
+
+    regenerated = RecurrenceService(session).materialize_template(
+        template.id,
+        scope_start=date(2026, 8, 24),
+        scope_end=date(2026, 8, 24),
+        bump_revision=False,
+    )
+    assert regenerated.preserved == 1
+    assert occurrence.planned_start_utc == datetime(2026, 8, 24, 13, tzinfo=UTC)
+
+
+def test_direct_occurrence_cancel_becomes_a_durable_template_override(
+    session: Session, semester: Semester
+) -> None:
+    template = BlockTemplate(
+        semester=semester,
+        title="Study routine",
+        weekdays=[0],
+        local_start_time=time(7),
+        duration_minutes=60,
+        effective_start_date=date(2026, 8, 24),
+        effective_end_date=date(2026, 8, 24),
+        managed_dataset="planning.schedule",
+        source_key="study-routine",
+    )
+    occurrence = stored_occurrence(
+        semester,
+        template=template,
+        managed_dataset="planning.schedule",
+        source_key="template:study-routine:2026-08-24",
+    )
+    session.add_all((template, occurrence))
+    session.flush()
+
+    service = ImportService(session)
+    draft = service.create_draft(
+        patch_payload(
+            semester,
+            managed_dataset="planning.schedule",
+            operations=[
+                {
+                    "operation": "cancel",
+                    "entity_type": "occurrence",
+                    "target_source_key": occurrence.source_key,
+                }
+            ],
+            scope_end=date(2026, 8, 24),
+        )
+    )
+    service.apply_draft(draft.id)
+
+    assert occurrence.cancelled_at is not None
+    assert occurrence.template_id == template.id
+    assert occurrence.is_override is True
+    assert occurrence.override_reason == "cancelled by reviewed occurrence patch"
+
+    regenerated = RecurrenceService(session).materialize_template(
+        template.id,
+        scope_start=date(2026, 8, 24),
+        scope_end=date(2026, 8, 24),
+        bump_revision=False,
+    )
+    assert regenerated.preserved == 1
+    assert occurrence.cancelled_at is not None
+
+
+def test_cross_date_occurrence_patch_preserves_the_template_recurrence_identity(
+    session: Session, semester: Semester
+) -> None:
+    template = BlockTemplate(
+        semester=semester,
+        title="Study routine",
+        weekdays=[0, 1],
+        local_start_time=time(7),
+        duration_minutes=60,
+        effective_start_date=date(2026, 8, 24),
+        effective_end_date=date(2026, 8, 25),
+        managed_dataset="planning.schedule",
+        source_key="study-routine",
+    )
+    monday = stored_occurrence(
+        semester,
+        template=template,
+        managed_dataset="planning.schedule",
+        source_key="template:study-routine:2026-08-24",
+    )
+    tuesday = stored_occurrence(
+        semester,
+        template=template,
+        managed_dataset="planning.schedule",
+        source_key="template:study-routine:2026-08-25",
+        occurrence_date=date(2026, 8, 25),
+        start=datetime(2026, 8, 25, 12, tzinfo=UTC),
+        end=datetime(2026, 8, 25, 13, tzinfo=UTC),
+    )
+    session.add_all((template, monday, tuesday))
+    session.flush()
+
+    service = ImportService(session)
+    draft = service.create_draft(
+        patch_payload(
+            semester,
+            managed_dataset="planning.schedule",
+            operations=[
+                {
+                    "operation": "update",
+                    "entity_type": "occurrence",
+                    "target_source_key": monday.source_key,
+                    "value": occurrence_value(
+                        source_key=monday.source_key or "missing",
+                        occurrence_date=date(2026, 8, 25),
+                        start_time="08:00:00",
+                    ),
+                }
+            ],
+            scope_end=date(2026, 8, 25),
+        )
+    )
+
+    assert draft.status is DraftStatus.READY
+    service.apply_draft(draft.id)
+
+    assert monday.occurrence_date == date(2026, 8, 24)
+    assert monday.planned_start_utc == datetime(2026, 8, 25, 13, tzinfo=UTC)
+    assert monday.is_override is True
+    assert tuesday.occurrence_date == date(2026, 8, 25)
 
 
 @pytest.mark.parametrize(

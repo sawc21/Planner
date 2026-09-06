@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, time, timedelta
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from semester_ops.application.errors import ValidationError
 from semester_ops.application.facade import SemesterOpsService
 from semester_ops.application.schedule import ScheduleService
 from semester_ops.db.base import Base
@@ -13,20 +16,27 @@ from semester_ops.db.models import (
     AppSettings,
     Assignment,
     AssignmentBlockLink,
+    AuditEvent,
     BlockOccurrence,
     BlockTemplate,
     CalendarEventLink,
+    ChecklistItem,
+    MealItem,
     Semester,
     SyncConflict,
     SyncRun,
+    WorkoutExercise,
+    WorkoutSet,
 )
 from semester_ops.db.session import create_sqlite_engine
 from semester_ops.domain.enums import (
     AssignmentInboxStatus,
+    BlockCategory,
     DuePrecision,
     SyncConflictStatus,
     SyncConnector,
     SyncStatus,
+    TrackingStatus,
 )
 from semester_ops.domain.time import resolve_wall_time
 
@@ -81,6 +91,79 @@ def test_today_marks_every_overlapping_block_as_conflicted(tmp_path: Path) -> No
         assert rows["Second"]["conflict"] is True
         assert rows["Clear"]["conflict"] is False
         assert len(today["conflicts"]) == 1
+
+
+def test_block_detail_surfaces_meal_recipe_and_workout_targets(tmp_path: Path) -> None:
+    with _session(tmp_path) as session:
+        semester = _seed_semester(session)
+        meal = _occurrence(
+            semester,
+            "Cook lemon-Parmesan chicken dinner",
+            date(2026, 8, 24),
+            time(17),
+        )
+        meal.category = BlockCategory.MEAL
+        meal.description = (
+            "Ingredients: chicken breast; baby potatoes; green beans; lemon; Parmesan."
+        )
+        meal.meal_items = [
+            MealItem(
+                food_name="Lemon-Parmesan chicken, crispy potatoes, and green beans",
+                planned_quantity=Decimal("1"),
+                calories_per_unit=Decimal("720"),
+                protein_grams_per_unit=Decimal("58"),
+            )
+        ]
+
+        workout = _occurrence(
+            semester,
+            "Full-body Lift A",
+            date(2026, 8, 24),
+            time(18),
+        )
+        workout.category = BlockCategory.WORKOUT
+        workout.description = (
+            "Warm up 5-8 minutes; leave 2-3 good reps in reserve; rest 2-3 minutes "
+            "for compounds and 60-90 seconds for smaller exercises."
+        )
+        workout.workout_exercises = [
+            WorkoutExercise(
+                name="Bench press",
+                planned_sets=2,
+                rep_min=6,
+                rep_max=10,
+                target_weight=Decimal("40"),
+                weight_unit="lb",
+                notes="Use a controlled lowering phase.",
+                sets=[
+                    WorkoutSet(set_number=1, target_reps=8),
+                    WorkoutSet(set_number=2, target_reps=8),
+                ],
+            )
+        ]
+        session.add_all([meal, workout])
+        session.commit()
+
+        service = SemesterOpsService(session)
+        meal_block = service.get_block(meal.id)["block"]
+        workout_block = service.get_block(workout.id)["block"]
+
+        assert meal_block["meal_guide"]["ingredients"] == [
+            "chicken breast",
+            "baby potatoes",
+            "green beans",
+            "lemon",
+            "Parmesan",
+        ]
+        assert meal_block["meal_guide"]["source_label"] == "Stored details + source recipe"
+        assert "chicken reaches 165 F" in " ".join(meal_block["meal_guide"]["steps"])
+        exercise = workout_block["workout_exercises"][0]
+        assert exercise["rep_target"] == "6-10 reps"
+        assert exercise["target_weight"] == "40"
+        assert exercise["notes"] == "Use a controlled lowering phase."
+        assert exercise["sets"][0]["set_number"] == 1
+        assert exercise["sets"][0]["target_reps"] == 8
+        assert "Rest 2-3 minutes" in workout_block["workout_guidance"][1]["text"]
 
 
 def test_sync_card_counts_only_dirty_projected_occurrences(tmp_path: Path) -> None:
@@ -186,6 +269,252 @@ def test_move_updates_manual_date_but_preserves_template_identity(tmp_path: Path
         assert manual.occurrence_date == date(2026, 8, 25)
         assert monday.occurrence_date == date(2026, 8, 24)
         assert tuesday.occurrence_date == date(2026, 8, 25)
+
+
+def test_manual_creation_uses_active_semester_and_audits_once(tmp_path: Path) -> None:
+    with _session(tmp_path) as session:
+        semester = _seed_semester(session)
+        service = ScheduleService(session)
+        start = _utc(date(2026, 8, 25), time(13, 15))
+
+        occurrence = service.create_occurrence(
+            title="  Office hours  ",
+            start_utc=start,
+            end_utc=start + timedelta(minutes=45),
+            calendar_projection=False,
+        )
+
+        settings = session.get(AppSettings, 1)
+        audit = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.event_type == "block.created",
+                AuditEvent.entity_id == occurrence.id,
+            )
+        )
+        assert occurrence.semester_id == semester.id
+        assert occurrence.occurrence_date == date(2026, 8, 25)
+        assert occurrence.title == "Office hours"
+        assert occurrence.revision == 1
+        assert occurrence.calendar_projection is False
+        assert settings is not None
+        assert settings.schedule_revision == 1
+        assert audit is not None
+
+
+def test_timeline_and_manual_creation_span_adjacent_planning_periods(tmp_path: Path) -> None:
+    with _session(tmp_path) as session:
+        fall = _seed_semester(session)
+        prep = Semester(
+            name="Pre-semester 2026",
+            start_date=date(2026, 7, 29),
+            end_date=date(2026, 8, 23),
+            is_active=False,
+        )
+        session.add(prep)
+        session.flush()
+        session.add_all(
+            [
+                _occurrence(prep, "Prep block", date(2026, 7, 29), time(9)),
+                _occurrence(fall, "Fall block", date(2026, 8, 24), time(9)),
+            ]
+        )
+        session.flush()
+        service = ScheduleService(session)
+
+        visible = service.list_occurrences(
+            _utc(date(2026, 7, 29), time(0)),
+            _utc(date(2026, 8, 25), time(0)),
+        )
+        fall_only = service.list_occurrences(
+            _utc(date(2026, 7, 29), time(0)),
+            _utc(date(2026, 8, 25), time(0)),
+            semester_id=fall.id,
+        )
+        created = service.create_occurrence(
+            title="Pre-semester appointment",
+            start_utc=_utc(date(2026, 7, 30), time(14)),
+            end_utc=_utc(date(2026, 7, 30), time(15)),
+        )
+        duplicate = service.duplicate_occurrence(created.id)
+
+        assert [item.title for item in visible] == ["Prep block", "Fall block"]
+        assert [item.title for item in fall_only] == ["Fall block"]
+        assert created.semester_id == prep.id
+        assert duplicate.semester_id == prep.id
+
+
+def test_manual_creation_rejects_missing_semester_and_invalid_ranges(tmp_path: Path) -> None:
+    with _session(tmp_path) as session:
+        service = ScheduleService(session)
+        start = _utc(date(2026, 8, 25), time(13))
+
+        with pytest.raises(ValidationError, match="active semester"):
+            service.create_occurrence(
+                title="No semester",
+                start_utc=start,
+                end_utc=start + timedelta(hours=1),
+            )
+
+        semester = Semester(
+            name="Fall 2026",
+            start_date=date(2026, 8, 24),
+            end_date=date(2026, 12, 12),
+            is_active=True,
+        )
+        session.add(semester)
+        session.flush()
+        settings = session.get(AppSettings, 1)
+        assert settings is not None
+        settings.active_semester_id = semester.id
+        session.flush()
+        with pytest.raises(ValidationError, match="after start"):
+            service.create_occurrence(
+                title="Backwards",
+                start_utc=start,
+                end_utc=start,
+            )
+        with pytest.raises(ValidationError, match="configured planning period"):
+            service.create_occurrence(
+                title="Outside semester",
+                start_utc=_utc(date(2027, 1, 2), time(9)),
+                end_utc=_utc(date(2027, 1, 2), time(10)),
+            )
+
+
+def test_duplicate_detaches_series_and_resets_tracking_children(tmp_path: Path) -> None:
+    with _session(tmp_path) as session:
+        semester = _seed_semester(session)
+        template = BlockTemplate(
+            semester=semester,
+            title="Lift",
+            weekdays=[0],
+            local_start_time=time(17),
+            duration_minutes=60,
+            effective_start_date=semester.start_date,
+            effective_end_date=semester.end_date,
+        )
+        source = _occurrence(
+            semester,
+            "Lift",
+            date(2026, 8, 24),
+            time(17),
+            template=template,
+        )
+        source.managed_dataset = "semester"
+        source.source_key = "lift:monday"
+        source.status = TrackingStatus.COMPLETED
+        source.actual_start_utc = source.planned_start_utc
+        source.actual_end_utc = source.planned_end_utc
+        source.is_override = True
+        source.override_reason = "moved by user"
+        source.checklist_items = [
+            ChecklistItem(
+                title="Warm up",
+                completed_at=source.planned_start_utc,
+            )
+        ]
+        source.meal_items = [
+            MealItem(
+                food_name="Shake",
+                planned_quantity=Decimal("1"),
+                consumed_quantity=Decimal("1.5"),
+                calories_per_unit=Decimal("250"),
+                protein_grams_per_unit=Decimal("30"),
+                completed_at=source.planned_end_utc,
+            )
+        ]
+        source.workout_exercises = [
+            WorkoutExercise(
+                name="Squat",
+                planned_sets=1,
+                sets=[
+                    WorkoutSet(
+                        set_number=1,
+                        target_reps=5,
+                        actual_reps=5,
+                        actual_weight=Decimal("225"),
+                        completed_at=source.planned_end_utc,
+                    )
+                ],
+            )
+        ]
+        source.calendar_link = CalendarEventLink(
+            calendar_id="dev-calendar",
+            event_id="source-event",
+            last_synced_local_revision=1,
+        )
+        session.add(source)
+        session.commit()
+
+        duplicate = ScheduleService(session).duplicate_occurrence(source.id)
+
+        audit = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.event_type == "block.duplicated",
+                AuditEvent.entity_id == duplicate.id,
+            )
+        )
+        settings = session.get(AppSettings, 1)
+        assert duplicate.id != source.id
+        assert duplicate.template_id is None
+        assert duplicate.managed_dataset is None
+        assert duplicate.source_key is None
+        assert duplicate.status is TrackingStatus.PLANNED
+        assert duplicate.actual_start_utc is None
+        assert duplicate.actual_end_utc is None
+        assert duplicate.is_override is False
+        assert duplicate.override_reason is None
+        assert duplicate.calendar_link is None
+        assert duplicate.revision == 1
+        assert duplicate.checklist_items[0].id != source.checklist_items[0].id
+        assert duplicate.checklist_items[0].completed_at is None
+        assert duplicate.meal_items[0].consumed_quantity is None
+        assert duplicate.meal_items[0].completed_at is None
+        assert duplicate.workout_exercises[0].sets[0].actual_reps is None
+        assert duplicate.workout_exercises[0].sets[0].actual_weight is None
+        assert duplicate.workout_exercises[0].sets[0].completed_at is None
+        assert settings is not None
+        assert settings.schedule_revision == 1
+        assert audit is not None
+        assert audit.data_json["source_occurrence_id"] == source.id
+
+
+def test_cancel_is_idempotent_preserves_projection_and_hides_block(tmp_path: Path) -> None:
+    with _session(tmp_path) as session:
+        semester = _seed_semester(session)
+        occurrence = _occurrence(semester, "Remove me", date(2026, 8, 24), time(9))
+        occurrence.calendar_link = CalendarEventLink(
+            calendar_id="dev-calendar",
+            event_id="remove-event",
+            last_synced_local_revision=1,
+        )
+        session.add(occurrence)
+        session.commit()
+        service = ScheduleService(session)
+
+        service.cancel_occurrence(occurrence.id)
+        first_revision = occurrence.revision
+        service.cancel_occurrence(occurrence.id)
+
+        persisted = session.get(BlockOccurrence, occurrence.id)
+        settings = session.get(AppSettings, 1)
+        audits = list(
+            session.scalars(
+                select(AuditEvent).where(
+                    AuditEvent.event_type == "block.cancelled",
+                    AuditEvent.entity_id == occurrence.id,
+                )
+            )
+        )
+        assert persisted is occurrence
+        assert persisted.cancelled_at is not None
+        assert persisted.calendar_link is not None
+        assert persisted.calendar_link.event_id == "remove-event"
+        assert occurrence.revision == first_revision == 2
+        assert service.get_today(date(2026, 8, 24)) == []
+        assert settings is not None
+        assert settings.schedule_revision == 1
+        assert len(audits) == 1
 
 
 def test_keep_planner_resolution_makes_next_sync_push_local_time(tmp_path: Path) -> None:

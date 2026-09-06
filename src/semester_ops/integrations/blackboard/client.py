@@ -45,7 +45,7 @@ class BlackboardFeedClient:
     ) -> BlackboardFetchResult:
         """Fetch a private feed conditionally and never include its URL in errors."""
 
-        _validate_private_url(private_url)
+        validate_blackboard_feed_url(private_url)
         headers = {"Accept": "text/calendar, text/plain;q=0.8"}
         if etag:
             headers["If-None-Match"] = etag
@@ -61,7 +61,7 @@ class BlackboardFeedClient:
             request_url = private_url
             redirect_count = 0
             while True:
-                _validate_private_url(request_url)
+                validate_blackboard_feed_url(request_url)
                 with client.stream(
                     "GET",
                     request_url,
@@ -78,7 +78,7 @@ class BlackboardFeedClient:
                             raise BlackboardFetchError(
                                 "Blackboard calendar returned a redirect without a destination"
                             )
-                        _validate_private_url(location)
+                        validate_blackboard_feed_url(location)
                         request_url = location
                         redirect_count += 1
                         continue
@@ -121,7 +121,9 @@ class BlackboardFeedClient:
                 client.close()
 
 
-def _validate_private_url(value: str) -> None:
+def validate_blackboard_feed_url(value: str) -> None:
+    """Require the private calendar subscription to use an absolute HTTPS URL."""
+
     parsed = urlsplit(value)
-    if parsed.scheme != "https" or not parsed.netloc:
+    if parsed.scheme != "https" or parsed.hostname is None:
         raise ValueError("Blackboard calendar URL must be an absolute HTTPS URL")

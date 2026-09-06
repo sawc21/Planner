@@ -4,6 +4,7 @@ from semester_ops.integrations.blackboard.client import (
     BlackboardFeedClient,
     BlackboardFetchError,
     BlackboardFetchResult,
+    validate_blackboard_feed_url,
 )
 from semester_ops.integrations.blackboard.feed import (
     BlackboardFeedIssue,
@@ -32,4 +33,5 @@ __all__ = [
     "parse_blackboard_ics",
     "planning_deadline",
     "reconcile_blackboard_feed",
+    "validate_blackboard_feed_url",
 ]

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/block_form.html" import block_form %}
 {% set page_title = "Edit block" %}
 {% set page_id = "edit-block" %}
 {% set section_label = "PRECISE SCHEDULE EDIT" %}
@@ -6,33 +7,132 @@
 {% set page_subtitle = "Manual control always wins. Fixed means AI cannot move it; you still can." %}
 
 {% block header_actions %}
-<a class="button button-quiet" href="{{ return_to|default('/') }}">Cancel</a>
+<a class="button button-secondary context-back" href="{{ return_to|default('/') }}" aria-label="Back to calendar">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+  <span>Back to calendar</span>
+</a>
 {% endblock %}
 
 {% block content %}
 <div class="edit-layout">
-  <form method="post" action="/blocks/{{ block.id }}/edit" class="panel edit-form">
-    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-    <input type="hidden" name="return_to" value="{{ return_to|default('/') }}">
-    <div class="panel-heading"><span>01</span><div><h2>Block identity</h2><p>Calendar receives the parent block, not its private details.</p></div></div>
-    <label class="field field-wide"><span>Title</span><input type="text" name="title" maxlength="160" required value="{{ block.title }}"></label>
-    <div class="field-grid">
-      <label class="field"><span>Category</span><select name="category">{% for category in categories %}<option value="{{ category.value }}" {% if category.value == block.category %}selected{% endif %}>{{ category.label }}</option>{% endfor %}</select></label>
-      <label class="field"><span>Movement rule</span><select name="flexibility"><option value="fixed" {% if block.flexibility == 'fixed' %}selected{% endif %}>Fixed / AI cannot move</option><option value="flexible" {% if block.flexibility == 'flexible' %}selected{% endif %}>Flexible / AI may propose</option><option value="optional" {% if block.flexibility == 'optional' %}selected{% endif %}>Optional / first to drop</option></select></label>
-    </div>
+  <div class="edit-main">
+    {{ block_form(block, categories, timezone, csrf_token, return_to, "/blocks/" ~ block.id ~ "/edit", "Save block") }}
 
-    <div class="panel-heading panel-subheading"><span>02</span><div><h2>Planned time</h2><p>Entered and displayed in {{ timezone|default('America/Chicago') }}.</p></div></div>
-    <div class="field-grid two-up">
-      <label class="field"><span>Starts</span><input type="datetime-local" name="planned_start_local" required value="{{ block.start_local|datetime_local }}"></label>
-      <label class="field"><span>Ends</span><input type="datetime-local" name="planned_end_local" required value="{{ block.end_local|datetime_local }}"></label>
-    </div>
-    {% if block.conflicts %}<div class="inline-alert"><strong>Overlap warning</strong><span>{{ block.conflicts|join(', ') }}</span></div>{% endif %}
+    {% if block.meal_guide %}
+    <section class="panel execution-sheet meal-guide" aria-labelledby="meal-guide-title">
+      <header class="execution-heading">
+        <div>
+          <span class="panel-code">MEAL EXECUTION</span>
+          <h2 id="meal-guide-title">{{ block.meal_guide.name }}</h2>
+        </div>
+        {% if block.meal_guide.source_label %}<small>{{ block.meal_guide.source_label }}</small>{% endif %}
+      </header>
 
-    <label class="field field-wide"><span>Notes</span><textarea name="notes" maxlength="4000" rows="5" placeholder="What will make this block easier to execute?">{{ block.notes|default('') }}</textarea></label>
-    <label class="switch-row"><input type="checkbox" name="project_to_calendar" value="true" {% if block.project_to_calendar|default(true) %}checked{% endif %}><span class="switch"></span><span><strong>Project parent block to Google Calendar</strong><small>Checklist, meal, and workout details remain private in Semester Ops.</small></span></label>
-    <div class="form-footer"><span>Editing an occurrence creates an override without changing its whole recurring template.</span><button class="button button-primary" type="submit">Save block</button></div>
-  </form>
+      {% if block.meal_items %}
+      <div class="tracked-servings" aria-label="Tracked meal servings">
+        {% for item in block.meal_items %}
+        <div>
+          <span>{{ item.name }}</span>
+          <strong>{{ item.planned_quantity }} {{ item.unit }}</strong>
+          <small>{{ item.calories }} kcal / {{ item.protein_grams }}g protein{% if not item.required %} / optional{% endif %}</small>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
 
-  <aside class="panel audit-card"><span class="panel-code">BLOCK RECORD</span><dl><div><dt>Status</dt><dd>{{ block.status|default('planned')|replace('_', ' ')|title }}</dd></div><div><dt>Source</dt><dd>{{ block.source_label|default('Manual') }}</dd></div><div><dt>Revision</dt><dd>{{ block.revision|default(0) }}</dd></div><div><dt>Google</dt><dd>{% if block.unsynced %}Local changes waiting{% elif block.calendar_event_id %}Projected{% else %}Not projected{% endif %}</dd></div></dl>{% if block.actual_start_local %}<hr><h3>Actual execution</h3><p>{{ block.actual_start_local|time }}{% if block.actual_end_local %} - {{ block.actual_end_local|time }}{% endif %}</p>{% endif %}</aside>
+      {% if block.meal_guide.ingredients or block.meal_guide.steps %}
+      <div class="execution-grid">
+        {% if block.meal_guide.ingredients %}
+        <section>
+          <h3>Ingredients</h3>
+          <ul class="ingredient-list">
+            {% for ingredient in block.meal_guide.ingredients %}<li>{{ ingredient }}</li>{% endfor %}
+          </ul>
+        </section>
+        {% endif %}
+        {% if block.meal_guide.steps %}
+        <section>
+          <h3>Cook it</h3>
+          <ol class="recipe-steps">
+            {% for step in block.meal_guide.steps %}<li>{{ step }}</li>{% endfor %}
+          </ol>
+        </section>
+        {% endif %}
+      </div>
+      {% endif %}
+      {% if block.meal_guide.missing_message %}<p class="detail-empty">{{ block.meal_guide.missing_message }}</p>{% endif %}
+    </section>
+    {% endif %}
+
+    {% if block.workout_exercises or block.workout_guidance %}
+    <section class="panel execution-sheet workout-guide" aria-labelledby="workout-guide-title">
+      <header class="execution-heading">
+        <div>
+          <span class="panel-code">TRAINING PLAN</span>
+          <h2 id="workout-guide-title">Sets, reps, and recovery</h2>
+        </div>
+        {% if block.workout_summary.total_sets %}<small>{{ block.workout_summary.completed_sets }} / {{ block.workout_summary.total_sets }} sets logged</small>{% endif %}
+      </header>
+
+      {% if block.source_notes %}<p class="program-note">{{ block.source_notes }}</p>{% endif %}
+
+      {% if block.workout_exercises %}
+      <div class="workout-program">
+        {% for exercise in block.workout_exercises %}
+        <article class="exercise-record">
+          <header>
+            <span>{{ "%02d"|format(loop.index) }}</span>
+            <div>
+              <h3>{{ exercise.name }}</h3>
+              <p><strong>{{ exercise.planned_sets }} sets</strong><i>/</i><strong>{{ exercise.rep_target or 'controlled reps' }}</strong>{% if exercise.target_weight %}<i>/</i><strong>{{ exercise.target_weight }} {{ exercise.weight_unit }}</strong>{% endif %}</p>
+            </div>
+          </header>
+          {% if exercise.notes %}<p class="exercise-cue">{{ exercise.notes }}</p>{% endif %}
+          <ol class="planned-sets" aria-label="Planned sets for {{ exercise.name }}">
+            {% for set in exercise.sets %}
+            <li class="{% if set.completed %}is-complete{% endif %}">
+              <span>Set {{ set.set_number|default(loop.index) }}</span>
+              <strong>{% if set.target_reps is not none %}{{ set.target_reps }} target reps{% elif exercise.rep_target %}{{ exercise.rep_target }}{% else %}Use the exercise cue{% endif %}</strong>
+              <small>{% if set.completed %}Logged{% if set.actual_reps is not none %}: {{ set.actual_reps }} reps{% endif %}{% if set.actual_weight %} @ {{ set.actual_weight }} {{ exercise.weight_unit }}{% endif %}{% else %}Not logged yet{% endif %}</small>
+            </li>
+            {% endfor %}
+          </ol>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="detail-empty">No exercise list is stored for this workout block.</p>
+      {% endif %}
+
+      {% if block.workout_guidance %}
+      <div class="recovery-strip" aria-label="Workout recovery guidance">
+        {% for item in block.workout_guidance %}
+        <div><span>{{ item.label }}</span><p>{{ item.text }}</p></div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </section>
+    {% endif %}
+  </div>
+
+  <div class="record-side">
+    <aside class="panel audit-card"><span class="panel-code">BLOCK RECORD</span><dl><div><dt>Status</dt><dd>{{ block.status|default('planned')|replace('_', ' ')|title }}</dd></div><div><dt>Source</dt><dd>{{ block.source_label|default('Manual') }}</dd></div><div><dt>Revision</dt><dd>{{ block.revision|default(0) }}</dd></div><div><dt>Google</dt><dd>{% if block.unsynced %}Local changes waiting{% elif block.calendar_event_id %}Projected{% else %}Not projected{% endif %}</dd></div></dl>{% if block.actual_start_local %}<hr><h3>Actual execution</h3><p>{{ block.actual_start_local|time }}{% if block.actual_end_local %} - {{ block.actual_end_local|time }}{% endif %}</p>{% endif %}</aside>
+
+    <aside class="panel record-actions">
+      <span class="panel-code">BLOCK ACTIONS</span>
+      <form method="post" action="/blocks/{{ block.id }}/duplicate">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <input type="hidden" name="return_to" value="{{ return_to|default('/') }}">
+        <button class="button button-secondary" type="submit">Duplicate independently</button>
+      </form>
+      <p>Copies planned checklist, meal, and workout details with fresh tracking state.</p>
+      <form method="post" action="/blocks/{{ block.id }}/delete" data-confirm="Remove this block from the schedule? Its history is retained and Google will reconcile on the next sync.">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <input type="hidden" name="return_to" value="{{ return_to|default('/') }}">
+        <input type="hidden" name="confirmation" value="true">
+        <button class="button button-danger" type="submit">Remove block</button>
+      </form>
+    </aside>
+  </div>
 </div>
 {% endblock %}

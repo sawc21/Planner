@@ -30,7 +30,7 @@
       <header>
         <div>
           <span class="assignment-state">{{ assignment.state|default('inbox')|replace('_', ' ') }}</span>
-          <h2>{{ assignment.title }}</h2>
+          <h2><a href="/assignments/{{ assignment.id }}">{{ assignment.title }}</a></h2>
           <p>{{ assignment.course_name|default('Unassigned course') }}</p>
         </div>
         <div class="due-stamp urgency-{{ assignment.urgency|default('normal') }}">
@@ -42,6 +42,7 @@
         <span>{{ assignment.estimated_minutes|default(0)|duration }} estimated</span>
         <span>{{ assignment.linked_block_count|default(0) }} study block{% if assignment.linked_block_count|default(0) != 1 %}s{% endif %}</span>
         {% if assignment.source_url %}<a href="{{ assignment.source_url }}" target="_blank" rel="noreferrer">Open Blackboard</a>{% endif %}
+        <a href="/assignments/{{ assignment.id }}">Documents + quiz</a>
       </div>
       {% if assignment.linked_blocks %}
       <div class="linked-blocks">

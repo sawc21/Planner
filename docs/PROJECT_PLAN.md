@@ -70,8 +70,8 @@ were accepted with the implementation approval and are part of the v1 contract.
 | 37 | How should Python dependencies be managed? | Use `pyproject.toml` and a reproducible lock file. Prefer `uv` for speed while retaining standard virtualenv/pip-compatible installation instructions. Support Python 3.12 or newer and verify against the actual development interpreter. |
 | 38 | Which frontend architecture should be used? | Jinja templates, purposeful CSS, and minimal local vanilla JavaScript. Ship precise move/edit controls first; drag/resize can follow without changing the server contract. No SPA or required Node runtime. |
 | 39 | Which MCP transport should v1 use? | Local STDIO launched by Codex from project configuration. It requires no extra port or authentication. Streamable HTTP is deferred to Pi/remote access. |
-| 40 | What can MCP mutate? | MCP may read planning context and create reversible drafts only. It cannot approve/apply, delete live data, resolve sync conflicts, or trigger Google/Blackboard synchronization. |
-| 41 | Are raw source documents stored by Semester Ops? | No. Store the submitted JSON, source filename/type/hash, assumptions, and audit metadata; leave the original attachment in the AI host. |
+| 40 | What can MCP mutate? | Schedule changes remain reversible drafts. MCP may directly replace only bounded assignment study/quiz JSON for a named assignment, with validation, idempotency, provenance, and audit logging. It cannot approve/apply drafts, delete live data, resolve sync conflicts, or trigger Google/Blackboard synchronization. |
+| 41 | Are raw source documents stored by Semester Ops? | Not in the Codex/MCP path. Store the submitted JSON, source filename/type/hash, assumptions, and audit metadata; leave the original attachment and extracted text in the AI host. |
 | 42 | How many semesters are supported? | The schema supports many semesters, but v1 exposes one active semester at a time. Applying a semester import requires exact start/end dates. |
 | 43 | What if a source document has approximate or missing dates/times? | Preserve them as unresolved draft findings and block approval until exact values are supplied. Never guess portal times or semester bounds. |
 | 44 | When does a logical day begin? | Default to a configurable 4:00 AM Central operational-day boundary so post-midnight activity stays with the intended day. |
@@ -202,11 +202,17 @@ MCP uses the official Python SDK over STDIO. Protocol logs go to stderr because 
 | `get_import_schema()` | Returns the supported schema version, definitions, examples, and validation rules. |
 | `get_planning_context(start_date, end_date)` | Returns stable IDs, current revision, fixed/flexible/optional blocks, free windows, constraints, and open assignments. |
 | `list_assignment_inbox(status)` | Returns read-only Blackboard assignment records. |
+| `get_assignment_study_schema()` | Returns the live bounded JSON schema and privacy workflow for a Codex-generated study set. |
+| `get_assignment_study(assignment_id)` | Returns the saved guide, provenance, and answer-redacted quiz for one assignment. |
+| `submit_assignment_study_set(assignment_id, payload, idempotency_key)` | Validates and stores derived study JSON plus filename/type/hash provenance; rejects raw source text and conflicting retries. |
 | `create_import_draft(payload, idempotency_key, base_revision)` | Creates a validated `replace_scope` or `patch` draft and returns its review URL. |
 | `create_planning_draft(payload, idempotency_key, base_revision)` | Creates a study-placement proposal through the same diff/validation engine. |
 | `get_draft(draft_id)` | Returns validation findings, diff summary, current state, and review URL. |
 
-There are deliberately no MCP tools for approval, direct mutation, deletion, conflict resolution, or external synchronization in v1.
+There are deliberately no MCP tools for approval, live schedule mutation, deletion, conflict
+resolution, or external synchronization in v1. Assignment study submission is the narrow direct
+write exception because it changes only derived quiz content for the named assignment and retains
+an audit record; it cannot alter scheduling or an external system.
 
 Every submitted draft includes:
 

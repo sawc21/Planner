@@ -46,6 +46,7 @@ from semester_ops.domain.enums import (
 from semester_ops.integrations.blackboard import BlackboardFeedClient
 from semester_ops.integrations.google_calendar import (
     CalendarPage,
+    GoogleCalendarAccessError,
     LocalCalendarProjection,
     RemoteCalendarEvent,
     SyncTokenExpired,
@@ -317,8 +318,12 @@ class _FakeCalendarGateway:
         self.pages: deque[CalendarPage | Exception] = deque([CalendarPage((), None, "sync-1")])
         self.upserts: list[LocalCalendarProjection] = []
         self.upsert_attempts: list[str] = []
+        self.upsert_exceptions: deque[Exception] = deque()
         self.fail_upsert_occurrence_ids: set[str] = set()
         self.sync_tokens: list[str | None] = []
+        self.deletes: list[tuple[str, str]] = []
+        self.remote_events: dict[str, RemoteCalendarEvent] = {}
+        self.reflect_writes_on_read = False
 
     def create_dev_calendar(self, *, timezone_name: str) -> str:
         del timezone_name
@@ -337,6 +342,12 @@ class _FakeCalendarGateway:
         page = self.pages.popleft()
         if isinstance(page, Exception):
             raise page
+        if self.reflect_writes_on_read and not page.events:
+            return CalendarPage(
+                tuple(self.remote_events.values()),
+                page.next_page_token,
+                page.next_sync_token,
+            )
         return page
 
     def upsert_projection(
@@ -348,10 +359,12 @@ class _FakeCalendarGateway:
     ) -> RemoteCalendarEvent:
         assert calendar_id == "dev-calendar"
         self.upsert_attempts.append(projection.occurrence_id)
+        if self.upsert_exceptions:
+            raise self.upsert_exceptions.popleft()
         if projection.occurrence_id in self.fail_upsert_occurrence_ids:
             raise RuntimeError("https://private.example/?secret=calendar-token")
         self.upserts.append(projection)
-        return RemoteCalendarEvent(
+        remote = RemoteCalendarEvent(
             event_id=event_id,
             occurrence_id=projection.occurrence_id,
             time_range=projection.time_range,
@@ -360,6 +373,8 @@ class _FakeCalendarGateway:
             tags=ownership_tags(projection.occurrence_id, projection.revision),
             etag='"etag"',
         )
+        self.remote_events[event_id] = remote
+        return remote
 
     def delete_owned_event(
         self,
@@ -368,8 +383,380 @@ class _FakeCalendarGateway:
         event_id: str,
         occurrence_id: str,
     ) -> bool:
-        del calendar_id, event_id, occurrence_id
+        assert calendar_id == "dev-calendar"
+        self.deletes.append((event_id, occurrence_id))
+        self.remote_events.pop(event_id, None)
         return True
+
+
+def _seed_google_occurrences(
+    factory: sessionmaker[Session],
+    *,
+    count: int,
+) -> tuple[str, ...]:
+    start = datetime(2026, 8, 24, 15, tzinfo=UTC)
+    with factory() as session:
+        semester = Semester(
+            name="Fall 2026",
+            start_date=date(2026, 8, 24),
+            end_date=date(2026, 12, 12),
+            is_active=True,
+        )
+        occurrences = [
+            BlockOccurrence(
+                semester=semester,
+                occurrence_date=date(2026, 8, 24),
+                title=f"Bounded event {index + 1}",
+                planned_start_utc=start + timedelta(hours=index * 2),
+                planned_end_utc=start + timedelta(hours=index * 2 + 1),
+            )
+            for index in range(count)
+        ]
+        session.add_all(
+            [
+                semester,
+                *occurrences,
+                AppSettings(
+                    id=1,
+                    active_semester_id=semester.id,
+                    google_calendar_id="dev-calendar",
+                ),
+            ]
+        )
+        session.commit()
+        return tuple(occurrence.id for occurrence in occurrences)
+
+
+def _google_sync_token(factory: sessionmaker[Session]) -> str | None:
+    with factory() as session:
+        state = session.scalar(
+            select(ExternalSourceState).where(ExternalSourceState.connector == SyncConnector.GOOGLE)
+        )
+    assert state is not None
+    return state.sync_token
+
+
+def test_google_read_access_failure_is_actionable_and_safe(tmp_path: Path) -> None:
+    factory = _session_factory(tmp_path)
+    _seed_google_occurrences(factory, count=0)
+    gateway = _FakeCalendarGateway()
+    access_error = GoogleCalendarAccessError(
+        "oauth_refresh_failed",
+        "Google authorization expired or was revoked.",
+    )
+    access_error.__cause__ = RuntimeError("https://private.example/?secret=oauth-token")
+    gateway.pages = deque([access_error])
+
+    result = SyncService(
+        factory,
+        (GoogleCalendarProjectionSync(lambda: gateway),),
+    ).sync_now()
+
+    run = result.runs[0]
+    assert run.status is SyncStatus.FAILED
+    assert run.details == {
+        "error_code": "oauth_refresh_failed",
+        "message": "Google authorization expired or was revoked.",
+        "category": "authorization",
+        "recovery": (
+            "Run .\\.venv\\Scripts\\semester-ops-google-setup.exe --reauthorize, "
+            "then press Sync now again."
+        ),
+    }
+    assert "oauth-token" not in str(result.as_dict())
+    with factory() as session:
+        persisted = session.get(SyncRun, run.run_id)
+    assert persisted is not None
+    assert persisted.details_json == run.details
+
+
+def test_google_remote_writes_are_bounded_and_resume_without_duplicates(
+    tmp_path: Path,
+) -> None:
+    factory = _session_factory(tmp_path)
+    occurrence_ids = _seed_google_occurrences(factory, count=5)
+    gateway = _FakeCalendarGateway()
+    gateway.reflect_writes_on_read = True
+    gateway.pages = deque([CalendarPage((), None, "sync-drained") for _ in range(3)])
+    service = SyncService(
+        factory,
+        (
+            GoogleCalendarProjectionSync(
+                lambda: gateway,
+                remote_mutation_limit=2,
+            ),
+        ),
+    )
+
+    first = service.sync_now().runs[0]
+    first_token = _google_sync_token(factory)
+    second = service.sync_now().runs[0]
+    second_token = _google_sync_token(factory)
+    third = service.sync_now().runs[0]
+    third_token = _google_sync_token(factory)
+
+    assert [first.status, second.status, third.status] == [
+        SyncStatus.PARTIAL,
+        SyncStatus.PARTIAL,
+        SyncStatus.SUCCEEDED,
+    ]
+    assert [first.created_count, second.created_count, third.created_count] == [2, 2, 1]
+    assert [
+        first.details["remote_mutations_deferred"],
+        second.details["remote_mutations_deferred"],
+        third.details["remote_mutations_deferred"],
+    ] == [3, 1, 0]
+    assert [
+        first.details["continuation_required"],
+        second.details["continuation_required"],
+        third.details["continuation_required"],
+    ] == [True, True, False]
+    assert [
+        first.details["retry_required"],
+        second.details["retry_required"],
+        third.details["retry_required"],
+    ] == [True, True, False]
+    assert [first_token, second_token, third_token] == [None, None, "sync-drained"]
+    assert gateway.sync_tokens == [None, None, None]
+    assert len(gateway.upsert_attempts) == 5
+    assert len(set(gateway.upsert_attempts)) == 5
+    assert set(gateway.upsert_attempts) == set(occurrence_ids)
+    with factory() as session:
+        links = tuple(session.scalars(select(CalendarEventLink)))
+    assert {link.occurrence_id for link in links} == set(occurrence_ids)
+
+
+def test_google_initial_smoke_limit_applies_once_then_uses_regular_limit(
+    tmp_path: Path,
+) -> None:
+    factory = _session_factory(tmp_path)
+    occurrence_ids = _seed_google_occurrences(factory, count=5)
+    gateway = _FakeCalendarGateway()
+    gateway.reflect_writes_on_read = True
+    gateway.pages = deque([CalendarPage((), None, "sync-drained") for _ in range(3)])
+    service = SyncService(
+        factory,
+        (
+            GoogleCalendarProjectionSync(
+                lambda: gateway,
+                remote_mutation_limit=3,
+                initial_remote_mutation_limit=1,
+            ),
+        ),
+    )
+
+    first = service.sync_now().runs[0]
+    with factory() as session:
+        first_state = session.scalar(
+            select(ExternalSourceState).where(ExternalSourceState.connector == SyncConnector.GOOGLE)
+        )
+        assert first_state is not None
+        first_metadata = dict(first_state.metadata_json)
+        first_token = first_state.sync_token
+
+    second = service.sync_now().runs[0]
+    with factory() as session:
+        second_state = session.scalar(
+            select(ExternalSourceState).where(ExternalSourceState.connector == SyncConnector.GOOGLE)
+        )
+        assert second_state is not None
+        second_metadata = dict(second_state.metadata_json)
+        second_token = second_state.sync_token
+
+    third = service.sync_now().runs[0]
+
+    assert [first.status, second.status, third.status] == [
+        SyncStatus.PARTIAL,
+        SyncStatus.PARTIAL,
+        SyncStatus.SUCCEEDED,
+    ]
+    assert [
+        first.details["remote_mutation_limit"],
+        second.details["remote_mutation_limit"],
+        third.details["remote_mutation_limit"],
+    ] == [1, 3, 3]
+    assert [
+        first.details["remote_mutations_attempted"],
+        second.details["remote_mutations_attempted"],
+        third.details["remote_mutations_attempted"],
+    ] == [1, 3, 1]
+    assert [
+        first.details["remote_mutations_deferred"],
+        second.details["remote_mutations_deferred"],
+        third.details["remote_mutations_deferred"],
+    ] == [4, 1, 0]
+    assert first_metadata["initial_smoke_attempted"] is True
+    assert first_metadata["remote_mutation_limit"] == 1
+    assert second_metadata["initial_smoke_attempted"] is True
+    assert second_metadata["remote_mutation_limit"] == 3
+    assert [first_token, second_token, _google_sync_token(factory)] == [
+        None,
+        None,
+        "sync-drained",
+    ]
+    assert len(gateway.upsert_attempts) == 5
+    assert len(set(gateway.upsert_attempts)) == 5
+    assert set(gateway.upsert_attempts) == set(occurrence_ids)
+
+
+@pytest.mark.parametrize(
+    ("access_error", "expected_category"),
+    [
+        (
+            GoogleCalendarAccessError(
+                "oauth_refresh_failed",
+                "Google authorization expired or was revoked.",
+            ),
+            "authorization",
+        ),
+        (
+            GoogleCalendarAccessError(
+                "calendar_rate_limited",
+                "Google Calendar rate limit reached. Wait briefly, then sync again.",
+            ),
+            "rate_limit",
+        ),
+    ],
+)
+def test_google_connector_wide_write_failure_stops_selected_writes_and_resumes(
+    tmp_path: Path,
+    access_error: GoogleCalendarAccessError,
+    expected_category: str,
+) -> None:
+    factory = _session_factory(tmp_path)
+    occurrence_ids = _seed_google_occurrences(factory, count=3)
+    gateway = _FakeCalendarGateway()
+    gateway.reflect_writes_on_read = True
+    gateway.pages = deque(
+        [
+            CalendarPage((), None, "sync-after-failure"),
+            CalendarPage((), None, "sync-after-failure"),
+        ]
+    )
+    gateway.upsert_exceptions.append(access_error)
+    service = SyncService(
+        factory,
+        (
+            GoogleCalendarProjectionSync(
+                lambda: gateway,
+                remote_mutation_limit=3,
+            ),
+        ),
+    )
+
+    failed = service.sync_now().runs[0]
+
+    assert failed.status is SyncStatus.PARTIAL
+    assert len(gateway.upsert_attempts) == 1
+    failed_occurrence_id = gateway.upsert_attempts[0]
+    assert failed.details["continuation_required"] is True
+    assert failed.details["retry_required"] is True
+    assert failed.details["failed_mutations"][0]["error_code"] == access_error.code
+    assert failed.details["failed_mutations"][0]["category"] == expected_category
+    assert _google_sync_token(factory) is None
+
+    resumed = service.sync_now().runs[0]
+
+    assert resumed.status is SyncStatus.SUCCEEDED
+    assert resumed.details["continuation_required"] is False
+    assert _google_sync_token(factory) == "sync-after-failure"
+    assert len(gateway.upsert_attempts) == 4
+    assert set(gateway.upsert_attempts) == set(occurrence_ids)
+    assert gateway.upsert_attempts.count(failed_occurrence_id) == 2
+    for occurrence_id in occurrence_ids:
+        if occurrence_id != failed_occurrence_id:
+            assert gateway.upsert_attempts.count(occurrence_id) == 1
+
+
+@pytest.mark.parametrize(
+    ("remote_limit", "initial_limit"),
+    [(0, None), (251, None), (2, 0), (2, 3)],
+)
+def test_google_remote_mutation_limits_reject_invalid_values(
+    remote_limit: int,
+    initial_limit: int | None,
+) -> None:
+    with pytest.raises(ValueError, match="remote_mutation_limit"):
+        GoogleCalendarProjectionSync(
+            _FakeCalendarGateway,
+            remote_mutation_limit=remote_limit,
+            initial_remote_mutation_limit=initial_limit,
+        )
+
+
+def test_google_sync_deletes_projection_for_a_cancelled_occurrence(tmp_path: Path) -> None:
+    factory = _session_factory(tmp_path)
+    start = datetime(2026, 8, 24, 15, tzinfo=UTC)
+    with factory() as session:
+        semester = Semester(
+            name="Fall 2026",
+            start_date=date(2026, 8, 24),
+            end_date=date(2026, 12, 12),
+            is_active=True,
+        )
+        occurrence = BlockOccurrence(
+            semester=semester,
+            occurrence_date=date(2026, 8, 24),
+            title="Cancelled class",
+            planned_start_utc=start,
+            planned_end_utc=start + timedelta(hours=1),
+        )
+        occurrence.calendar_link = CalendarEventLink(
+            calendar_id="dev-calendar",
+            event_id="cancelled-event",
+            last_synced_local_revision=1,
+        )
+        session.add_all(
+            [
+                semester,
+                occurrence,
+                AppSettings(
+                    id=1,
+                    active_semester_id=semester.id,
+                    google_calendar_id="dev-calendar",
+                ),
+            ]
+        )
+        session.commit()
+        occurrence_id = occurrence.id
+        ScheduleService(session).cancel_occurrence(occurrence_id)
+        session.commit()
+
+    gateway = _FakeCalendarGateway()
+    gateway.pages = deque(
+        [
+            CalendarPage(
+                (
+                    RemoteCalendarEvent(
+                        event_id="cancelled-event",
+                        occurrence_id=occurrence_id,
+                        time_range=TimeRange(start, start + timedelta(hours=1)),
+                        summary="Cancelled class",
+                        description="Managed by the local Semester Ops tracker.",
+                        tags=ownership_tags(occurrence_id, 1),
+                    ),
+                ),
+                None,
+                "sync-1",
+            )
+        ]
+    )
+    result = SyncService(
+        factory,
+        (GoogleCalendarProjectionSync(lambda: gateway),),
+    ).sync_now()
+
+    assert result.runs[0].status is SyncStatus.SUCCEEDED
+    assert result.runs[0].deleted_count == 1
+    assert gateway.deletes == [("cancelled-event", occurrence_id)]
+    with factory() as session:
+        persisted = session.get(BlockOccurrence, occurrence_id)
+        link = session.scalar(
+            select(CalendarEventLink).where(CalendarEventLink.occurrence_id == occurrence_id)
+        )
+    assert persisted is not None
+    assert persisted.cancelled_at is not None
+    assert link is None
 
 
 def test_google_runner_pushes_then_pulls_a_remote_move(tmp_path: Path) -> None:

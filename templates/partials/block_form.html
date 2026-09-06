@@ -1,0 +1,26 @@
+{% macro block_form(block, categories, timezone, csrf_token, return_to, action, submit_label, mode="edit") %}
+<form method="post" action="{{ action }}" class="panel edit-form">
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+  <input type="hidden" name="return_to" value="{{ return_to|default('/') }}">
+  <div class="panel-heading"><span>01</span><div><h2>Block identity</h2><p>Calendar receives the parent block, not its private details.</p></div></div>
+  <label class="field field-wide"><span>Title</span><input type="text" name="title" maxlength="160" required autofocus value="{{ block.title|default('') }}"></label>
+  <div class="field-grid">
+    <label class="field"><span>Category</span><select name="category">{% for category in categories %}<option value="{{ category.value }}" {% if category.value == block.category %}selected{% endif %}>{{ category.label }}</option>{% endfor %}</select></label>
+    <label class="field"><span>Movement rule</span><select name="flexibility"><option value="fixed" {% if block.flexibility == 'fixed' %}selected{% endif %}>Fixed / AI cannot move</option><option value="flexible" {% if block.flexibility == 'flexible' %}selected{% endif %}>Flexible / AI may propose</option><option value="optional" {% if block.flexibility == 'optional' %}selected{% endif %}>Optional / first to drop</option></select></label>
+  </div>
+
+  <div class="panel-heading panel-subheading"><span>02</span><div><h2>Planned time</h2><p>Entered and displayed in {{ timezone|default('America/Chicago') }}.</p></div></div>
+  <div class="field-grid two-up">
+    <label class="field"><span>Starts</span><input type="datetime-local" name="planned_start_local" required value="{{ block.start_local|datetime_local }}"></label>
+    <label class="field"><span>Ends</span><input type="datetime-local" name="planned_end_local" required value="{{ block.end_local|datetime_local }}"></label>
+  </div>
+  {% if block.conflicts %}<div class="inline-alert"><strong>Overlap warning</strong><span>{{ block.conflicts|join(', ') }}</span></div>{% endif %}
+
+  <label class="field field-wide"><span>Notes</span><textarea name="notes" maxlength="4000" rows="5" placeholder="What will make this block easier to execute?">{{ block.notes or '' }}</textarea></label>
+  <label class="switch-row"><input type="checkbox" name="project_to_calendar" value="true" {% if block.project_to_calendar|default(true) %}checked{% endif %}><span class="switch"></span><span><strong>Project parent block to Google Calendar</strong><small>Checklist, meal, and workout details remain private in Semester Ops.</small></span></label>
+  <div class="form-footer">
+    <span>{% if mode == "create" %}This creates one independent occurrence. Use imports or MCP review for whole-series changes.{% else %}Editing an occurrence creates an override without changing its whole recurring template.{% endif %}</span>
+    <button class="button button-primary" type="submit">{{ submit_label }}</button>
+  </div>
+</form>
+{% endmacro %}

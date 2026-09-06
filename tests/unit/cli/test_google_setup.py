@@ -16,6 +16,7 @@ from semester_ops.db.models import AppSettings
 from semester_ops.db.session import create_sqlite_engine
 from semester_ops.integrations.google_calendar.gateway import (
     DEV_CALENDAR_NAME,
+    GoogleCalendarAccessError,
     GoogleCalendarConfigurationError,
     GoogleCalendarGateway,
 )
@@ -44,6 +45,23 @@ class FakeGatewayFactory:
     ) -> FakeCalendarCreator:
         self.calls.append((client_secret_file, token_file))
         return self.creator
+
+
+class FailingGatewayFactory:
+    def __init__(self) -> None:
+        self.calls: list[tuple[Path, Path]] = []
+
+    def __call__(
+        self,
+        *,
+        client_secret_file: Path,
+        token_file: Path,
+    ) -> FakeCalendarCreator:
+        self.calls.append((client_secret_file, token_file))
+        raise GoogleCalendarAccessError(
+            "oauth_refresh_failed",
+            "https://private.example/?access_token=reauthorization-secret",
+        ) from RuntimeError("credential=reauthorization-secret")
 
 
 class FakeRequest:
@@ -186,6 +204,107 @@ def test_setup_is_idempotent_after_calendar_id_is_persisted(
     assert gateway_factory.calls == []
     assert "already complete" in stdout.getvalue()
     assert "already-configured" not in stdout.getvalue()
+
+
+def test_reauthorization_preserves_existing_calendar_without_creating_another(
+    tmp_path: Path,
+    database: tuple[Engine, sessionmaker[Session]],
+) -> None:
+    _engine, session_maker = database
+    client_file = tmp_path / "client-with-secret-value.json"
+    client_file.write_text("client-secret-material", encoding="utf-8")
+    token_file = tmp_path / "token-with-secret-value.json"
+    token_file.write_text("existing-token-material", encoding="utf-8")
+    with session_maker.begin() as session:
+        session.add(AppSettings(id=1, google_calendar_id="already-configured"))
+    creator = FakeCalendarCreator("must-not-replace-existing-calendar")
+    reauthorization_factory = FakeGatewayFactory(creator)
+    stdout = StringIO()
+    stderr = StringIO()
+
+    exit_code = run_cli(
+        settings=make_settings(tmp_path, client_file),
+        reauthorization_gateway_factory=reauthorization_factory,
+        session_factory=make_session_scope(session_maker),
+        stdout=stdout,
+        stderr=stderr,
+        reauthorize=True,
+    )
+
+    assert exit_code == 0
+    assert stderr.getvalue() == ""
+    assert reauthorization_factory.calls == [(client_file, token_file)]
+    assert creator.timezones == []
+    with session_maker() as session:
+        assert session.get(AppSettings, 1).google_calendar_id == "already-configured"
+    assert token_file.read_text(encoding="utf-8") == "existing-token-material"
+    combined_output = stdout.getvalue() + stderr.getvalue()
+    assert "authorization refreshed" in combined_output.lower()
+    assert "already-configured" not in combined_output
+    assert "must-not-replace-existing-calendar" not in combined_output
+    assert "client-secret-material" not in combined_output
+    assert "existing-token-material" not in combined_output
+
+
+def test_reauthorization_requires_an_existing_calendar_before_oauth(
+    tmp_path: Path,
+    database: tuple[Engine, sessionmaker[Session]],
+) -> None:
+    _engine, session_maker = database
+    client_file = tmp_path / "client.json"
+    client_file.write_text("{}", encoding="utf-8")
+    reauthorization_factory = FakeGatewayFactory(FakeCalendarCreator())
+    stderr = StringIO()
+
+    exit_code = run_cli(
+        settings=make_settings(tmp_path, client_file),
+        reauthorization_gateway_factory=reauthorization_factory,
+        session_factory=make_session_scope(session_maker),
+        stdout=StringIO(),
+        stderr=stderr,
+        reauthorize=True,
+    )
+
+    assert exit_code == 2
+    assert reauthorization_factory.calls == []
+    assert "not configured yet" in stderr.getvalue()
+
+
+def test_failed_reauthorization_preserves_binding_and_hides_sensitive_details(
+    tmp_path: Path,
+    database: tuple[Engine, sessionmaker[Session]],
+) -> None:
+    _engine, session_maker = database
+    client_file = tmp_path / "client-with-secret-value.json"
+    client_file.write_text("client-secret-material", encoding="utf-8")
+    token_file = tmp_path / "token-with-secret-value.json"
+    token_file.write_text("existing-token-material", encoding="utf-8")
+    with session_maker.begin() as session:
+        session.add(AppSettings(id=1, google_calendar_id="already-configured"))
+    reauthorization_factory = FailingGatewayFactory()
+    stdout = StringIO()
+    stderr = StringIO()
+
+    exit_code = run_cli(
+        settings=make_settings(tmp_path, client_file),
+        reauthorization_gateway_factory=reauthorization_factory,
+        session_factory=make_session_scope(session_maker),
+        stdout=stdout,
+        stderr=stderr,
+        reauthorize=True,
+    )
+
+    assert exit_code == 1
+    assert reauthorization_factory.calls == [(client_file, token_file)]
+    with session_maker() as session:
+        assert session.get(AppSettings, 1).google_calendar_id == "already-configured"
+    assert token_file.read_text(encoding="utf-8") == "existing-token-material"
+    combined_output = stdout.getvalue() + stderr.getvalue()
+    assert "reauthorization failed" in combined_output.lower()
+    assert "already-configured" not in combined_output
+    assert "reauthorization-secret" not in combined_output
+    assert "client-secret-material" not in combined_output
+    assert "existing-token-material" not in combined_output
 
 
 def test_setup_rejects_primary_without_persisting_it(

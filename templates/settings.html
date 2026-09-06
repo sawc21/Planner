@@ -21,6 +21,14 @@
     <dl>
       {% for detail in connector.details %}<div><dt>{{ detail.label }}</dt><dd>{{ detail.value }}</dd></div>{% endfor %}
     </dl>
+    {% if connector.notice %}
+    <aside class="connector-notice tone-{{ connector.notice.tone|default('warning') }}" role="{% if connector.notice.tone == 'error' %}alert{% else %}status{% endif %}">
+      <strong>{{ connector.notice.title }}</strong>
+      <p>{{ connector.notice.message }}</p>
+      {% if connector.notice.recovery %}<small>{{ connector.notice.recovery }}</small>{% endif %}
+      {% if connector.notice.command %}<code>{{ connector.notice.command }}</code>{% endif %}
+    </aside>
+    {% endif %}
     {% if connector.action_url %}<a class="button button-secondary button-small" href="{{ connector.action_url }}">{{ connector.action_label|default('Configure') }}</a>{% endif %}
   </article>
   {% else %}
@@ -46,7 +54,7 @@
       <label class="field"><span>Protein</span><div class="input-suffix"><input type="number" name="protein_target_grams" min="0" max="2000" value="{{ settings.protein_target_grams|default('', true) }}"><b>grams</b></div></label>
     </div>
 
-    <div class="panel-heading panel-subheading"><span>03</span><div><h2>Blackboard feed</h2><p>Stored locally and never shown after saving.</p></div></div>
+    <div class="panel-heading panel-subheading"><span>03</span><div><h2>Blackboard feed</h2><p>In Blackboard: Calendar &gt; Calendar Settings &gt; ... &gt; Share Calendar. Copy that private link here.</p></div></div>
     <label class="field"><span>Private ICS URL</span><input type="password" name="blackboard_ics_url" value="" placeholder="{% if settings.blackboard_configured %}Configured - enter a new URL to replace{% else %}https://.../calendar.ics{% endif %}" autocomplete="off"><small>Leave blank to keep the existing secret. Sync now performs a read-only refresh.</small></label>
     {% if settings.blackboard_configured %}<label class="switch-row"><input type="checkbox" name="clear_blackboard_ics" value="true"><span class="switch"></span><span><strong>Remove the saved Blackboard feed</strong><small>This clears only the private URL; imported assignments remain local.</small></span></label>{% endif %}
 
@@ -54,9 +62,24 @@
   </form>
 
   <aside class="settings-side">
-    <section class="panel safety-panel"><span class="panel-code">BOUNDARIES</span><h2>What this app will not do</h2><ul><li>Write to your primary Google Calendar</li><li>Guess a calendar by its display name</li><li>Write grades or completion to Blackboard</li><li>Run sync in the background</li><li>Expose this server beyond localhost</li></ul></section>
+    <section class="panel safety-panel"><span class="panel-code">BOUNDARIES</span><h2>What this app will not do</h2><ul><li>Write to your primary Google Calendar</li><li>Guess a calendar by its display name</li><li>Write grades or completion to Blackboard</li><li>Run sync in the background</li><li>Make this app public on the internet</li></ul></section>
     {% if sync_conflicts %}<section class="panel conflict-panel"><div class="panel-heading compact"><span>!</span><div><h2>Calendar conflicts</h2><p>Choose the time that should win, then sync again.</p></div></div>{% for conflict in sync_conflicts %}<article class="sync-conflict"><strong>{{ conflict.title }}</strong><dl><div><dt>Planner</dt><dd>{{ conflict.planner_start_local|day }} / {{ conflict.planner_start_local|time }} - {{ conflict.planner_end_local|time }}</dd></div><div><dt>Google</dt><dd>{{ conflict.remote_start_local|day }} / {{ conflict.remote_start_local|time }} - {{ conflict.remote_end_local|time }}</dd></div></dl><div><form method="post" action="/sync-conflicts/{{ conflict.id }}/resolve"><input type="hidden" name="_csrf" value="{{ csrf_token }}"><input type="hidden" name="resolution" value="keep_planner"><button class="button button-secondary button-small" type="submit">Keep planner</button></form><form method="post" action="/sync-conflicts/{{ conflict.id }}/resolve"><input type="hidden" name="_csrf" value="{{ csrf_token }}"><input type="hidden" name="resolution" value="use_remote"><button class="button button-primary button-small" type="submit">Use Google time</button></form></div></article>{% endfor %}</section>{% endif %}
-    <section class="panel sync-history"><div class="panel-heading compact"><span>04</span><div><h2>Recent syncs</h2></div></div>{% for run in sync_runs %}<article class="run status-{{ run.status|default('success') }}"><i></i><div><strong>{{ run.summary }}</strong><span>{{ run.started_at|day }} / {{ run.started_at|time }}</span></div><small>{{ run.duration_ms|default(0) }}ms</small></article>{% else %}<p class="muted-copy">No synchronization runs yet.</p>{% endfor %}</section>
+    <section class="panel sync-history">
+      <div class="panel-heading compact"><span>04</span><div><h2>Recent syncs</h2></div></div>
+      {% for run in sync_runs %}
+      <article class="run status-{{ run.status|default('success') }}">
+        <i aria-hidden="true"></i>
+        <div>
+          <strong>{{ run.summary }}</strong>
+          <span>{{ run.started_at|day }} / {{ run.started_at|time }}</span>
+          {% if run.message %}<p class="run-message">{{ run.message }}</p>{% endif %}
+          {% if run.continuation_required %}<p class="run-progress">{{ run.remote_mutations_attempted }} attempted / {{ run.remote_mutations_deferred }} remaining</p>{% endif %}
+          {% if run.recovery %}<p class="run-recovery">Next: {{ run.recovery }}</p>{% endif %}
+        </div>
+        <small>{{ run.duration_label|default('') }}</small>
+      </article>
+      {% else %}<p class="muted-copy">No synchronization runs yet.</p>{% endfor %}
+    </section>
   </aside>
 </div>
 {% endblock %}

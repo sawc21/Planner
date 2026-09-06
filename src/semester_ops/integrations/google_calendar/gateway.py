@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import stat
 import tempfile
@@ -9,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, Self
 
-from google.auth.exceptions import GoogleAuthError
+from google.auth.exceptions import GoogleAuthError, TransportError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -35,6 +36,15 @@ class GoogleCalendarError(RuntimeError):
 
 class GoogleCalendarConfigurationError(GoogleCalendarError):
     pass
+
+
+class GoogleCalendarAccessError(GoogleCalendarError):
+    """An allowlisted, user-actionable Google access failure."""
+
+    def __init__(self, code: str, public_message: str) -> None:
+        super().__init__(public_message)
+        self.code = code
+        self.public_message = public_message
 
 
 class GoogleCalendarOwnershipError(GoogleCalendarError):
@@ -99,6 +109,7 @@ class GoogleCalendarGateway:
         *,
         client_secret_file: Path,
         token_file: Path,
+        force_reauthorize: bool = False,
     ) -> Self:
         if not client_secret_file.is_file():
             raise GoogleCalendarConfigurationError(
@@ -107,32 +118,61 @@ class GoogleCalendarGateway:
 
         scopes = [GOOGLE_CALENDAR_SCOPE]
         credentials: Credentials | None = None
-        if token_file.is_file():
+        if token_file.is_file() and not force_reauthorize:
             try:
                 credentials = Credentials.from_authorized_user_file(  # type: ignore[no-untyped-call]
                     str(token_file), scopes
                 )
             except (ValueError, OSError) as exc:
-                raise GoogleCalendarConfigurationError(
-                    "Stored Google OAuth token is invalid; remove it and run setup again"
+                raise GoogleCalendarAccessError(
+                    "oauth_required",
+                    "Stored Google authorization is invalid. Run Google setup with --reauthorize.",
                 ) from exc
 
         if credentials is not None and credentials.expired and credentials.refresh_token:
             try:
                 credentials.refresh(Request())  # type: ignore[no-untyped-call]
+            except TransportError as exc:
+                raise GoogleCalendarAccessError(
+                    "calendar_temporarily_unavailable",
+                    "Google could not be reached while refreshing authorization. Try again.",
+                ) from exc
             except GoogleAuthError as exc:
-                raise GoogleCalendarConfigurationError(
-                    "Google OAuth token refresh failed; run setup again"
+                raise GoogleCalendarAccessError(
+                    "oauth_refresh_failed",
+                    "Google authorization expired or was revoked. "
+                    "Run Google setup with --reauthorize.",
                 ) from exc
         elif credentials is None or not credentials.valid:
             try:
                 flow = InstalledAppFlow.from_client_secrets_file(str(client_secret_file), scopes)
-                credentials = flow.run_local_server(port=0)
+                credentials = (
+                    flow.run_local_server(port=0, prompt="consent")
+                    if force_reauthorize
+                    else flow.run_local_server(port=0)
+                )
             except (ValueError, OSError) as exc:
                 raise GoogleCalendarConfigurationError("Google OAuth setup failed") from exc
+            if force_reauthorize and not credentials.refresh_token:
+                raise GoogleCalendarAccessError(
+                    "oauth_refresh_failed",
+                    "Google did not return long-lived authorization. "
+                    "Run setup with --reauthorize and approve access again.",
+                )
 
+        try:
+            service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
+        except TransportError as exc:
+            raise GoogleCalendarAccessError(
+                "calendar_temporarily_unavailable",
+                "Google Calendar is temporarily unavailable. Try again.",
+            ) from exc
+        except GoogleAuthError as exc:
+            raise GoogleCalendarAccessError(
+                "oauth_refresh_failed",
+                "Google authorization could not be used. Run Google setup with --reauthorize.",
+            ) from exc
         _write_private_token_file(token_file, credentials.to_json())
-        service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
         return cls(service)
 
     def create_dev_calendar(self, *, timezone_name: str) -> str:
@@ -141,7 +181,13 @@ class GoogleCalendarGateway:
             "description": "Development projection owned by the local Semester Ops app.",
             "timeZone": timezone_name,
         }
-        response = self._service.calendars().insert(body=body).execute(num_retries=2)
+        try:
+            response = self._service.calendars().insert(body=body).execute(num_retries=2)
+        except HttpError as exc:
+            raise _access_error_from_http(
+                exc,
+                fallback_message="Google Calendar creation failed.",
+            ) from exc
         calendar_id = response.get("id") if isinstance(response, Mapping) else None
         if not isinstance(calendar_id, str) or not calendar_id:
             raise GoogleCalendarError("Google did not return the created development calendar ID")
@@ -172,7 +218,10 @@ class GoogleCalendarGateway:
         except HttpError as exc:
             if _http_status(exc) == 410:
                 raise SyncTokenExpired("Google Calendar sync token expired") from exc
-            raise GoogleCalendarError("Google Calendar event listing failed") from exc
+            raise _access_error_from_http(
+                exc,
+                fallback_message="Google Calendar could not be read.",
+            ) from exc
 
         if not isinstance(response, Mapping):
             raise GoogleCalendarError("Google Calendar returned an invalid event-list response")
@@ -206,7 +255,10 @@ class GoogleCalendarGateway:
                 )
             except HttpError as exc:
                 if _http_status(exc) != 409:
-                    raise GoogleCalendarError("Google Calendar event creation failed") from exc
+                    raise _access_error_from_http(
+                        exc,
+                        fallback_message="Google Calendar event creation failed.",
+                    ) from exc
                 existing = self._get_event(calendar_id, event_id)
                 if existing is None:
                     raise GoogleCalendarError(
@@ -243,7 +295,10 @@ class GoogleCalendarGateway:
         except HttpError as exc:
             if _http_status(exc) == 404:
                 return False
-            raise GoogleCalendarError("Google Calendar event deletion failed") from exc
+            raise _access_error_from_http(
+                exc,
+                fallback_message="Google Calendar event deletion failed.",
+            ) from exc
         return True
 
     def _get_event(self, calendar_id: str, event_id: str) -> RemoteCalendarEvent | None:
@@ -256,7 +311,10 @@ class GoogleCalendarGateway:
         except HttpError as exc:
             if _http_status(exc) == 404:
                 return None
-            raise GoogleCalendarError("Google Calendar event lookup failed") from exc
+            raise _access_error_from_http(
+                exc,
+                fallback_message="Google Calendar event lookup failed.",
+            ) from exc
         if not isinstance(response, Mapping):
             raise GoogleCalendarError("Google Calendar returned an invalid event response")
         return remote_event_from_google(response)
@@ -274,7 +332,10 @@ class GoogleCalendarGateway:
                 .execute(num_retries=2)
             )
         except HttpError as exc:
-            raise GoogleCalendarError("Google Calendar event update failed") from exc
+            raise _access_error_from_http(
+                exc,
+                fallback_message="Google Calendar event update failed.",
+            ) from exc
         if not isinstance(response, Mapping):
             raise GoogleCalendarError("Google Calendar returned an invalid event response")
         return response
@@ -344,6 +405,72 @@ def _optional_token(value: object) -> str | None:
 
 def _http_status(error: HttpError) -> int | None:
     return getattr(error.resp, "status", None)
+
+
+def _access_error_from_http(
+    error: HttpError,
+    *,
+    fallback_message: str,
+) -> GoogleCalendarAccessError:
+    status = _http_status(error)
+    if status == 401:
+        return GoogleCalendarAccessError(
+            "oauth_refresh_failed",
+            "Google authorization expired or was revoked. Run Google setup with --reauthorize.",
+        )
+    if status in {403, 429} and (status == 429 or _is_rate_limit_error(error)):
+        return GoogleCalendarAccessError(
+            "calendar_rate_limited",
+            "Google Calendar rate limit reached. Wait briefly, then sync again.",
+        )
+    if status == 403:
+        return GoogleCalendarAccessError(
+            "calendar_permission_denied",
+            "Google denied access to the Semester Ops calendar. "
+            "Run Google setup with --reauthorize.",
+        )
+    if status == 404:
+        return GoogleCalendarAccessError(
+            "calendar_not_found",
+            "The saved Semester Ops development calendar no longer exists in Google.",
+        )
+    if status is not None and status >= 500:
+        return GoogleCalendarAccessError(
+            "calendar_temporarily_unavailable",
+            "Google Calendar is temporarily unavailable. Try syncing again.",
+        )
+    return GoogleCalendarAccessError("calendar_read_failed", fallback_message)
+
+
+def _is_rate_limit_error(error: HttpError) -> bool:
+    allowed_reasons = {"rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded"}
+    try:
+        payload = json.loads(error.content.decode("utf-8"))
+    except (AttributeError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    if not isinstance(payload, Mapping):
+        return False
+    error_payload = payload.get("error")
+    if not isinstance(error_payload, Mapping):
+        return False
+    raw_errors = error_payload.get("errors")
+    if not isinstance(raw_errors, list):
+        return False
+    return any(
+        isinstance(item, Mapping) and item.get("reason") in allowed_reasons for item in raw_errors
+    )
+
+
+def reauthorizing_gateway_from_oauth_files(
+    *,
+    client_secret_file: Path,
+    token_file: Path,
+) -> GoogleCalendarGateway:
+    return GoogleCalendarGateway.from_oauth_files(
+        client_secret_file=client_secret_file,
+        token_file=token_file,
+        force_reauthorize=True,
+    )
 
 
 def _write_private_token_file(token_file: Path, contents: str) -> None:
